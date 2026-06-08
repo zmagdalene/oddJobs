@@ -47,9 +47,18 @@ function ensureAppSchema(PDO $pdo): void
 
     addColumnIfMissing($pdo, 'jobs', 'location', "varchar(120) DEFAULT 'Greenwood Valley'");
     addColumnIfMissing($pdo, 'jobs', 'full_address', "varchar(255) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'address_line1', "varchar(160) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'address_line2', "varchar(160) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'address_town', "varchar(120) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'address_county', "varchar(120) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'eircode', "varchar(20) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'country', "varchar(80) DEFAULT 'Ireland'");
     addColumnIfMissing($pdo, 'jobs', 'latitude', "decimal(10,7) NULL");
     addColumnIfMissing($pdo, 'jobs', 'longitude', "decimal(10,7) NULL");
     addColumnIfMissing($pdo, 'jobs', 'frequency', "varchar(80) DEFAULT 'One-time'");
+    addColumnIfMissing($pdo, 'jobs', 'schedule_days', "varchar(80) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'preferred_start_date', "date NULL");
+    addColumnIfMissing($pdo, 'jobs', 'notes', "text NULL");
     addColumnIfMissing($pdo, 'jobs', 'scheduled_at', "datetime NULL");
     addColumnIfMissing($pdo, 'jobs', 'is_recurring', "tinyint(1) NOT NULL DEFAULT 0");
     addColumnIfMissing($pdo, 'jobs', 'status', "varchar(20) NOT NULL DEFAULT 'open'");
@@ -57,6 +66,12 @@ function ensureAppSchema(PDO $pdo): void
 
     addColumnIfMissing($pdo, 'users', 'neighbourhood', "varchar(120) DEFAULT 'Greenwood Valley'");
     addColumnIfMissing($pdo, 'users', 'full_address', "varchar(255) NULL");
+    addColumnIfMissing($pdo, 'users', 'address_line1', "varchar(160) NULL");
+    addColumnIfMissing($pdo, 'users', 'address_line2', "varchar(160) NULL");
+    addColumnIfMissing($pdo, 'users', 'address_town', "varchar(120) NULL");
+    addColumnIfMissing($pdo, 'users', 'address_county', "varchar(120) NULL");
+    addColumnIfMissing($pdo, 'users', 'eircode', "varchar(20) NULL");
+    addColumnIfMissing($pdo, 'users', 'country', "varchar(80) DEFAULT 'Ireland'");
     addColumnIfMissing($pdo, 'users', 'latitude', "decimal(10,7) NULL");
     addColumnIfMissing($pdo, 'users', 'longitude', "decimal(10,7) NULL");
     addColumnIfMissing($pdo, 'users', 'bio', "text NULL");
@@ -66,6 +81,7 @@ function ensureAppSchema(PDO $pdo): void
     addColumnIfMissing($pdo, 'users', 'availability_note', "varchar(160) NULL");
     addColumnIfMissing($pdo, 'users', 'password_hash', "varchar(255) NULL");
     addColumnIfMissing($pdo, 'users', 'created_at', "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfMissing($pdo, 'applications', 'agreed_rate', "decimal(8,2) NULL");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS messages (
@@ -169,7 +185,8 @@ function seedAppData(PDO $pdo): void
         (1, 'pending'),
         (2, 'accepted'),
         (3, 'rejected'),
-        (4, 'completed')
+        (4, 'completed'),
+        (5, 'cancelled')
     ");
 
     updateUser($pdo, 1, [
@@ -274,6 +291,9 @@ function seedAppData(PDO $pdo): void
 
 function updateUser(PDO $pdo, int $id, array $data): void
 {
+    if (!$data) {
+        return;
+    }
     $sets = [];
     $params = ['user_id' => $id];
     foreach ($data as $column => $value) {
@@ -340,6 +360,113 @@ function money(float|string|null $amount): string
 function labelize(?string $value): string
 {
     return ucwords(str_replace('_', ' ', (string) $value));
+}
+
+function selectedRadius(mixed $value): int
+{
+    $radius = (int) ($value ?? 10);
+    return in_array($radius, [5, 10, 20, 50], true) ? $radius : 10;
+}
+
+function addressFromPost(array $source, array $fallback = []): array
+{
+    $town = trim((string) ($source['address_town'] ?? $source['location'] ?? $source['neighbourhood'] ?? $fallback['address_town'] ?? $fallback['neighbourhood'] ?? 'Balbriggan'));
+    $data = [
+        'address_line1' => trim((string) ($source['address_line1'] ?? $fallback['address_line1'] ?? '')),
+        'address_line2' => trim((string) ($source['address_line2'] ?? $fallback['address_line2'] ?? '')),
+        'address_town' => $town ?: 'Balbriggan',
+        'address_county' => trim((string) ($source['address_county'] ?? $fallback['address_county'] ?? '')),
+        'eircode' => strtoupper(trim((string) ($source['eircode'] ?? $fallback['eircode'] ?? ''))),
+        'country' => trim((string) ($source['country'] ?? $fallback['country'] ?? 'Ireland')) ?: 'Ireland',
+    ];
+    $parts = array_filter([$data['address_line1'], $data['address_line2'], $data['address_town'], $data['address_county'], $data['eircode'], $data['country']]);
+    $data['full_address'] = implode(', ', $parts);
+    return $data;
+}
+
+function publicArea(?string $location): string
+{
+    $area = trim((string) $location);
+    if ($area === '' || strcasecmp($area, 'Greenwood Valley') === 0) {
+        return 'Balbriggan';
+    }
+    if (strcasecmp($area, 'Maple Court') === 0) {
+        return 'Cork';
+    }
+    if (strcasecmp($area, 'Oak Lane') === 0) {
+        return 'Galway';
+    }
+
+    $parts = array_values(array_filter(array_map('trim', explode(',', $area))));
+    $public = $parts[0] ?: 'Balbriggan';
+    return match (strtolower($public)) {
+        'greenwood valley' => 'Balbriggan',
+        'maple court' => 'Cork',
+        'oak lane' => 'Galway',
+        default => $public,
+    };
+}
+
+function scheduleDaysFromPost(mixed $days): string
+{
+    $allowed = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    $selected = is_array($days) ? $days : [];
+    $clean = array_values(array_intersect($allowed, array_map('strtolower', array_map('strval', $selected))));
+    return implode(',', $clean);
+}
+
+function scheduleLabel(?string $days): string
+{
+    $labels = [
+        'mon' => 'Monday',
+        'tue' => 'Tuesday',
+        'wed' => 'Wednesday',
+        'thu' => 'Thursday',
+        'fri' => 'Friday',
+        'sat' => 'Saturday',
+        'sun' => 'Sunday',
+    ];
+    $parts = array_values(array_filter(array_map('trim', explode(',', (string) $days))));
+    $names = array_values(array_intersect_key($labels, array_flip($parts)));
+    if (!$names) {
+        return 'Flexible';
+    }
+    if (count($names) === 1) {
+        return $names[0];
+    }
+    $last = array_pop($names);
+    return implode(', ', $names) . ' and ' . $last;
+}
+
+function scheduleFrequency(?string $days, ?string $fallback = null): string
+{
+    $count = count(array_filter(array_map('trim', explode(',', (string) $days))));
+    if ($count > 0) {
+        return $count . ' ' . ($count === 1 ? 'day' : 'days') . ' per week';
+    }
+    return trim((string) $fallback) ?: 'Flexible';
+}
+
+function defaultSearchPoint(?array $user = null): array
+{
+    $lat = nullableCoordinate($user['latitude'] ?? null);
+    $lng = nullableCoordinate($user['longitude'] ?? null);
+    if ($lat !== null && $lng !== null) {
+        return [$lat, $lng, publicArea($user['neighbourhood'] ?? 'Balbriggan')];
+    }
+
+    // TODO: Replace this default with user-controlled geocoding/address lookup when that feature is added.
+    return [53.6085, -6.1838, 'Balbriggan'];
+}
+
+function distanceKm(float $latA, float $lngA, float $latB, float $lngB): float
+{
+    $earthKm = 6371;
+    $dLat = deg2rad($latB - $latA);
+    $dLng = deg2rad($lngB - $lngA);
+    $a = sin($dLat / 2) ** 2
+        + cos(deg2rad($latA)) * cos(deg2rad($latB)) * sin($dLng / 2) ** 2;
+    return $earthKm * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
 
 function currentUser(PDO $pdo): ?array
@@ -417,6 +544,67 @@ function usersByType(PDO $pdo, string $type): array
     ");
     $stmt->execute(['type' => $type]);
     return $stmt->fetchAll();
+}
+
+function helpers(PDO $pdo, array $filters = [], ?array $user = null): array
+{
+    $where = ["t.user_type = 'worker'"];
+    $params = [];
+
+    if (!empty($filters['category_id'])) {
+        $where[] = "EXISTS (
+            SELECT 1 FROM user_categories uc
+            WHERE uc.user_id = u.user_id AND uc.category_id = :category_id
+        )";
+        $params['category_id'] = (int) $filters['category_id'];
+    }
+
+    if (!empty($filters['q'])) {
+        $where[] = "(u.name LIKE :query_name OR u.bio LIKE :query_bio OR u.neighbourhood LIKE :query_location OR EXISTS (
+            SELECT 1 FROM user_categories ucq
+            JOIN job_category cq ON cq.category_id = ucq.category_id
+            WHERE ucq.user_id = u.user_id AND cq.category_name LIKE :query_category
+        ))";
+        $query = '%' . $filters['q'] . '%';
+        $params['query_name'] = $query;
+        $params['query_bio'] = $query;
+        $params['query_location'] = $query;
+        $params['query_category'] = $query;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT u.*, t.user_type,
+               COALESCE((
+                   SELECT GROUP_CONCAT(DISTINCT c.category_name ORDER BY c.category_name SEPARATOR ', ')
+                   FROM user_categories ucs
+                   JOIN job_category c ON c.category_id = ucs.category_id
+                   WHERE ucs.user_id = u.user_id
+               ), '') AS services,
+               COALESCE((
+                   SELECT COUNT(*) FROM bookings b
+                   JOIN applications a ON a.application_id = b.application_id
+                   WHERE a.worker_id = u.user_id AND b.booking_status = 'confirmed'
+               ), 0) AS completed_bookings
+        FROM users u
+        JOIN user_type t ON t.user_type_id = u.user_type_id
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY u.created_at DESC, u.name
+    ");
+    $stmt->execute($params);
+    $helpers = $stmt->fetchAll();
+
+    $radius = (float) ($filters['radius'] ?? 10);
+    $nearby = !empty($filters['nearby']);
+    if ($nearby) {
+        [$baseLat, $baseLng] = defaultSearchPoint($user);
+        $helpers = array_values(array_filter($helpers, function (array $helper) use ($baseLat, $baseLng, $radius): bool {
+            $lat = nullableCoordinate($helper['latitude'] ?? null);
+            $lng = nullableCoordinate($helper['longitude'] ?? null);
+            return $lat === null || $lng === null || distanceKm($baseLat, $baseLng, $lat, $lng) <= $radius;
+        }));
+    }
+
+    return $helpers;
 }
 
 function unreadCount(PDO $pdo, int $userId): int
@@ -529,7 +717,7 @@ function listingMapMarkers(array $jobs): array
         }
 
         $jobId = (int) $job['job_id'];
-        $area = trim((string) ($job['location'] ?? $job['family_neighbourhood'] ?? 'Ireland'));
+        $area = publicArea($job['location'] ?? $job['family_neighbourhood'] ?? 'Balbriggan');
         $markers[] = [
             'marker_type' => 'job',
             'id' => $jobId,
@@ -541,6 +729,35 @@ function listingMapMarkers(array $jobs): array
             'category' => labelize($job['category_name'] ?? 'General help'),
             'image' => (string) ($job['family_avatar'] ?? ''),
             'url' => 'index.php?page=job&id=' . $jobId,
+        ];
+    }
+
+    return $markers;
+}
+
+function helperMapMarkers(array $helpers): array
+{
+    $markers = [];
+    foreach ($helpers as $helper) {
+        $latitude = nullableCoordinate($helper['latitude'] ?? null);
+        $longitude = nullableCoordinate($helper['longitude'] ?? null);
+        if ($latitude === null || $longitude === null) {
+            continue;
+        }
+
+        $helperId = (int) $helper['user_id'];
+        $services = array_filter(array_map('trim', explode(',', (string) ($helper['services'] ?? ''))));
+        $markers[] = [
+            'marker_type' => 'helper',
+            'id' => $helperId,
+            'title' => (string) ($helper['name'] ?? 'Household helper'),
+            'area' => publicArea($helper['neighbourhood'] ?? 'Balbriggan'),
+            'latitude' => publicMapCoordinate($latitude, $helperId, 0),
+            'longitude' => publicMapCoordinate($longitude, $helperId, 1),
+            'price' => money($helper['hourly_rate'] ?? 0) . '/hr',
+            'category' => $services ? implode(', ', array_map('labelize', $services)) : 'Household help',
+            'image' => (string) ($helper['avatar_url'] ?? ''),
+            'url' => 'index.php?page=worker&id=' . $helperId,
         ];
     }
 
@@ -571,11 +788,13 @@ function applicationsForJob(PDO $pdo, int $jobId): array
     $stmt = $pdo->prepare("
         SELECT a.*,
                s.status_name,
+               COALESCE(a.agreed_rate, j.pay) AS agreed_rate,
                u.name AS worker_name,
                u.email AS worker_email,
                u.hourly_rate,
                u.avatar_url
         FROM applications a
+        LEFT JOIN jobs j ON j.job_id = a.job_id
         LEFT JOIN application_status s ON s.status_id = a.application_status_id
         LEFT JOIN users u ON u.user_id = a.worker_id
         WHERE a.job_id = :job_id
@@ -588,8 +807,9 @@ function applicationsForJob(PDO $pdo, int $jobId): array
 function applicationFor(PDO $pdo, int $jobId, int $workerId): ?array
 {
     $stmt = $pdo->prepare("
-        SELECT a.*, s.status_name
+        SELECT a.*, s.status_name, COALESCE(a.agreed_rate, j.pay) AS agreed_rate
         FROM applications a
+        LEFT JOIN jobs j ON j.job_id = a.job_id
         LEFT JOIN application_status s ON s.status_id = a.application_status_id
         WHERE a.job_id = :job_id AND a.worker_id = :worker_id
     ");
@@ -643,12 +863,16 @@ function conversations(PDO $pdo, int $userId): array
                receiver.avatar_url AS receiver_avatar,
                j.title AS job_title,
                j.pay,
+               COALESCE(a.agreed_rate, j.pay) AS agreed_rate,
                j.frequency,
+               j.schedule_days,
                j.location
         FROM messages m
         LEFT JOIN users sender ON sender.user_id = m.sender_id
         LEFT JOIN users receiver ON receiver.user_id = m.receiver_id
         LEFT JOIN jobs j ON j.job_id = m.job_id
+        LEFT JOIN applications a ON a.job_id = j.job_id
+            AND ((a.worker_id = m.sender_id AND j.family_id = m.receiver_id) OR (a.worker_id = m.receiver_id AND j.family_id = m.sender_id))
         WHERE m.sender_id = :sender_id OR m.receiver_id = :receiver_id
         ORDER BY m.created_at DESC, m.message_id DESC
     ");
@@ -667,7 +891,9 @@ function conversations(PDO $pdo, int $userId): array
                 'job_id' => $message['job_id'],
                 'job_title' => $message['job_title'],
                 'pay' => $message['pay'],
+                'agreed_rate' => $message['agreed_rate'],
                 'frequency' => $message['frequency'],
+                'schedule_days' => $message['schedule_days'],
                 'location' => $message['location'],
                 'unread' => 0,
             ];
@@ -729,7 +955,8 @@ function myPostedJobs(PDO $pdo, int $userId): array
 function myWorkerApplications(PDO $pdo, int $userId): array
 {
     $stmt = $pdo->prepare("
-        SELECT a.*, s.status_name, j.title, j.pay, j.location, j.frequency, u.name AS family_name
+        SELECT a.*, s.status_name, COALESCE(a.agreed_rate, j.pay) AS agreed_rate,
+               j.title, j.pay, j.location, j.frequency, j.schedule_days, u.name AS family_name
         FROM applications a
         LEFT JOIN application_status s ON s.status_id = a.application_status_id
         LEFT JOIN jobs j ON j.job_id = a.job_id
@@ -775,8 +1002,9 @@ function handlePost(PDO $pdo): void
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
         $userType = (string) ($_POST['user_type'] ?? 'family');
-        $neighbourhood = trim((string) ($_POST['neighbourhood'] ?? 'Greenwood Valley'));
-        $fullAddress = trim((string) ($_POST['full_address'] ?? $neighbourhood));
+        $neighbourhood = trim((string) ($_POST['neighbourhood'] ?? 'Balbriggan'));
+        $address = addressFromPost($_POST, ['neighbourhood' => $neighbourhood]);
+        $fullAddress = $address['full_address'];
         $latitude = nullableCoordinate($_POST['latitude'] ?? null);
         $longitude = nullableCoordinate($_POST['longitude'] ?? null);
 
@@ -791,15 +1019,21 @@ function handlePost(PDO $pdo): void
 
         try {
             $stmt = $pdo->prepare("
-                INSERT INTO users (name, email, user_type_id, neighbourhood, full_address, latitude, longitude, password_hash)
-                VALUES (:name, :email, :user_type_id, :neighbourhood, :full_address, :latitude, :longitude, :password_hash)
+                INSERT INTO users (name, email, user_type_id, neighbourhood, full_address, address_line1, address_line2, address_town, address_county, eircode, country, latitude, longitude, password_hash)
+                VALUES (:name, :email, :user_type_id, :neighbourhood, :full_address, :address_line1, :address_line2, :address_town, :address_county, :eircode, :country, :latitude, :longitude, :password_hash)
             ");
             $stmt->execute([
                 'name' => $name,
                 'email' => $email,
                 'user_type_id' => $typeId,
-                'neighbourhood' => $neighbourhood ?: 'Greenwood Valley',
+                'neighbourhood' => $address['address_town'] ?: ($neighbourhood ?: 'Balbriggan'),
                 'full_address' => $fullAddress ?: $neighbourhood,
+                'address_line1' => $address['address_line1'],
+                'address_line2' => $address['address_line2'],
+                'address_town' => $address['address_town'],
+                'address_county' => $address['address_county'],
+                'eircode' => $address['eircode'],
+                'country' => $address['country'],
                 'latitude' => $latitude,
                 'longitude' => $longitude,
                 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
@@ -848,14 +1082,21 @@ function handlePost(PDO $pdo): void
     if ($action === 'update_profile') {
         $name = trim((string) ($_POST['name'] ?? $current['name']));
         $neighbourhood = trim((string) ($_POST['neighbourhood'] ?? $current['neighbourhood']));
-        $fullAddress = trim((string) ($_POST['full_address'] ?? $current['full_address'] ?? $neighbourhood));
+        $address = addressFromPost($_POST, $current);
+        $fullAddress = $address['full_address'];
         $latitude = nullableCoordinate($_POST['latitude'] ?? null) ?? nullableCoordinate($current['latitude'] ?? null);
         $longitude = nullableCoordinate($_POST['longitude'] ?? null) ?? nullableCoordinate($current['longitude'] ?? null);
 
         $data = [
             'name' => $name ?: $current['name'],
-            'neighbourhood' => $neighbourhood ?: 'Ireland',
+            'neighbourhood' => $address['address_town'] ?: ($neighbourhood ?: 'Ireland'),
             'full_address' => $fullAddress ?: $neighbourhood,
+            'address_line1' => $address['address_line1'],
+            'address_line2' => $address['address_line2'],
+            'address_town' => $address['address_town'],
+            'address_county' => $address['address_county'],
+            'eircode' => $address['eircode'],
+            'country' => $address['country'],
             'latitude' => $latitude,
             'longitude' => $longitude,
             'bio' => trim((string) ($_POST['bio'] ?? $current['bio'] ?? '')),
@@ -880,14 +1121,17 @@ function handlePost(PDO $pdo): void
             redirectTo('index.php?page=account');
         }
 
-        $location = trim((string) ($_POST['location'] ?? $current['neighbourhood'] ?? 'Ireland'));
-        $fullAddress = trim((string) ($_POST['full_address'] ?? $location));
+        $address = addressFromPost($_POST, $current);
+        $location = $address['address_town'] ?: trim((string) ($_POST['location'] ?? $current['neighbourhood'] ?? 'Ireland'));
+        $fullAddress = $address['full_address'];
         $latitude = nullableCoordinate($_POST['latitude'] ?? null) ?? nullableCoordinate($current['latitude'] ?? null);
         $longitude = nullableCoordinate($_POST['longitude'] ?? null) ?? nullableCoordinate($current['longitude'] ?? null);
+        $scheduleDays = scheduleDaysFromPost($_POST['schedule_days'] ?? []);
+        $frequency = scheduleFrequency($scheduleDays, trim((string) ($_POST['frequency'] ?? '')));
 
         $stmt = $pdo->prepare("
-            INSERT INTO jobs (category_id, title, description, pay, family_id, location, full_address, latitude, longitude, frequency, scheduled_at, is_recurring, status)
-            VALUES (:category_id, :title, :description, :pay, :family_id, :location, :full_address, :latitude, :longitude, :frequency, :scheduled_at, :is_recurring, 'open')
+            INSERT INTO jobs (category_id, title, description, pay, family_id, location, full_address, address_line1, address_line2, address_town, address_county, eircode, country, latitude, longitude, frequency, schedule_days, preferred_start_date, notes, scheduled_at, is_recurring, status)
+            VALUES (:category_id, :title, :description, :pay, :family_id, :location, :full_address, :address_line1, :address_line2, :address_town, :address_county, :eircode, :country, :latitude, :longitude, :frequency, :schedule_days, :preferred_start_date, :notes, :scheduled_at, :is_recurring, 'open')
         ");
         $stmt->execute([
             'category_id' => (int) ($_POST['category_id'] ?? 7),
@@ -897,9 +1141,18 @@ function handlePost(PDO $pdo): void
             'family_id' => (int) $current['user_id'],
             'location' => $location ?: 'Ireland',
             'full_address' => $fullAddress ?: $location,
+            'address_line1' => $address['address_line1'],
+            'address_line2' => $address['address_line2'],
+            'address_town' => $address['address_town'],
+            'address_county' => $address['address_county'],
+            'eircode' => $address['eircode'],
+            'country' => $address['country'],
             'latitude' => $latitude,
             'longitude' => $longitude,
-            'frequency' => trim((string) ($_POST['frequency'] ?? 'One-time')),
+            'frequency' => $frequency,
+            'schedule_days' => $scheduleDays ?: null,
+            'preferred_start_date' => !empty($_POST['preferred_start_date']) ? (string) $_POST['preferred_start_date'] : null,
+            'notes' => trim((string) ($_POST['notes'] ?? '')),
             'scheduled_at' => !empty($_POST['scheduled_at']) ? str_replace('T', ' ', (string) $_POST['scheduled_at']) . ':00' : null,
             'is_recurring' => isset($_POST['is_recurring']) ? 1 : 0,
         ]);
@@ -911,7 +1164,7 @@ function handlePost(PDO $pdo): void
         $jobId = (int) ($_POST['job_id'] ?? 0);
         $workerId = (int) $current['user_id'];
         if (($current['user_type'] ?? '') !== 'worker') {
-            flash('Only worker accounts can apply to jobs.');
+            flash('Only helper accounts can apply to jobs.');
             redirectTo('index.php?page=job&id=' . $jobId);
         }
 
@@ -925,8 +1178,10 @@ function handlePost(PDO $pdo): void
         $existing = applicationFor($pdo, $jobId, $workerId);
         if (!$existing) {
             $stmt = $pdo->prepare("
-                INSERT INTO applications (job_id, worker_id, application_status_id)
-                VALUES (:job_id, :worker_id, 1)
+                INSERT INTO applications (job_id, worker_id, application_status_id, agreed_rate)
+                SELECT j.job_id, :worker_id, 1, j.pay
+                FROM jobs j
+                WHERE j.job_id = :job_id
             ");
             $stmt->execute(['job_id' => $jobId, 'worker_id' => $workerId]);
         }
@@ -977,15 +1232,25 @@ function handlePost(PDO $pdo): void
     if ($action === 'update_application_status') {
         $applicationId = (int) ($_POST['application_id'] ?? 0);
         $status = (string) ($_POST['status'] ?? 'pending');
+        $allowedStatuses = ['accepted', 'rejected', 'cancelled'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = 'pending';
+        }
         $stmt = $pdo->prepare("
             UPDATE applications a
             JOIN jobs j ON j.job_id = a.job_id
             SET a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = :status LIMIT 1)
             WHERE a.application_id = :application_id
               AND j.family_id = :family_id
+              AND (
+                  (:transition_status IN ('accepted', 'rejected') AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'pending' LIMIT 1))
+                  OR (:cancel_status = 'cancelled' AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'accepted' LIMIT 1))
+              )
         ");
         $stmt->execute([
             'status' => $status,
+            'transition_status' => $status,
+            'cancel_status' => $status,
             'application_id' => $applicationId,
             'family_id' => (int) $current['user_id'],
         ]);
