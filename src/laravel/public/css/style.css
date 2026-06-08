@@ -711,77 +711,6 @@ h3 {
     border-radius: 8px;
 }
 
-.results-surface {
-    min-width: 0;
-}
-
-.mobile-view-toggle {
-    display: none;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 14px;
-    padding: 5px;
-    background: #eef4f1;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-}
-
-.mobile-view-toggle a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 42px;
-    color: var(--navy);
-    border-radius: 6px;
-    font-size: 0.93rem;
-    font-weight: 900;
-}
-
-.mobile-view-toggle a.is-active {
-    color: #fff;
-    background: var(--green-dark);
-}
-
-.listing-results-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
-    gap: 20px;
-    align-items: start;
-}
-
-.listing-results-layout .job-grid-wide {
-    grid-template-columns: 1fr;
-}
-
-.list-pane {
-    min-width: 0;
-}
-
-.map-pane {
-    position: sticky;
-    top: 126px;
-    overflow: hidden;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-}
-
-.listings-map {
-    width: 100%;
-    min-height: 580px;
-}
-
-.map-privacy-note {
-    margin: 0;
-    padding: 12px 14px;
-    color: var(--muted);
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-    font-size: 0.88rem;
-}
-
 .map-layout {
     display: grid;
     grid-template-columns: 300px minmax(0, 1fr);
@@ -844,74 +773,6 @@ h3 {
 
 .map-marker .worker-marker {
     background: var(--blue);
-}
-
-.leaflet-popup-content {
-    margin: 12px;
-}
-
-.map-popup-card {
-    display: grid;
-    grid-template-columns: 54px minmax(0, 1fr);
-    gap: 12px;
-    align-items: center;
-    width: 230px;
-}
-
-.map-popup-card strong,
-.map-popup-card span,
-.map-popup-card a {
-    display: block;
-}
-
-.map-popup-card strong {
-    color: var(--navy);
-    font-size: 0.98rem;
-    line-height: 1.25;
-}
-
-.map-popup-card span {
-    margin-top: 2px;
-    color: var(--muted);
-    font-size: 0.84rem;
-    line-height: 1.25;
-}
-
-.map-popup-card a {
-    margin-top: 8px;
-    color: var(--green-dark);
-    font-weight: 900;
-}
-
-.map-popup-image,
-.map-popup-fallback {
-    width: 54px;
-    height: 54px;
-    border-radius: 8px;
-}
-
-.map-popup-image {
-    object-fit: cover;
-}
-
-.map-popup-fallback {
-    display: grid;
-    place-items: center;
-    color: var(--green-dark);
-    background: var(--green-soft);
-    font-weight: 900;
-}
-
-.map-empty-note {
-    max-width: 220px;
-    padding: 10px 12px;
-    color: var(--navy);
-    background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    font-size: 0.9rem;
-    font-weight: 800;
 }
 
 .empty-state {
@@ -1468,7 +1329,6 @@ h3 {
     .hero-band,
     .browse-layout,
     .map-layout,
-    .listing-results-layout,
     .detail-layout,
     .worker-profile-layout,
     .account-grid {
@@ -1477,7 +1337,6 @@ h3 {
 
     .hero-visual,
     .filter-panel,
-    .map-pane,
     .account-panel {
         position: static;
     }
@@ -1522,19 +1381,6 @@ h3 {
     .worker-grid,
     .stats-strip {
         grid-template-columns: 1fr;
-    }
-
-    .mobile-view-toggle {
-        display: grid;
-    }
-
-    .results-surface.show-list .map-pane,
-    .results-surface.show-map .list-pane {
-        display: none;
-    }
-
-    .listings-map {
-        min-height: 68vh;
     }
 
     .messages-layout {
