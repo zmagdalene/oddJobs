@@ -57,6 +57,7 @@ function ensureAppSchema(PDO $pdo): void
     addColumnIfMissing($pdo, 'jobs', 'longitude', "decimal(10,7) NULL");
     addColumnIfMissing($pdo, 'jobs', 'frequency', "varchar(80) DEFAULT 'One-time'");
     addColumnIfMissing($pdo, 'jobs', 'schedule_days', "varchar(80) NULL");
+    addColumnIfMissing($pdo, 'jobs', 'schedule_grid', "text NULL");
     addColumnIfMissing($pdo, 'jobs', 'preferred_start_date', "date NULL");
     addColumnIfMissing($pdo, 'jobs', 'notes', "text NULL");
     addColumnIfMissing($pdo, 'jobs', 'scheduled_at', "datetime NULL");
@@ -79,9 +80,12 @@ function ensureAppSchema(PDO $pdo): void
     addColumnIfMissing($pdo, 'users', 'experience_years', "int DEFAULT 1");
     addColumnIfMissing($pdo, 'users', 'avatar_url', "varchar(255) NULL");
     addColumnIfMissing($pdo, 'users', 'availability_note', "varchar(160) NULL");
+    addColumnIfMissing($pdo, 'users', 'availability_grid', "text NULL");
     addColumnIfMissing($pdo, 'users', 'password_hash', "varchar(255) NULL");
     addColumnIfMissing($pdo, 'users', 'created_at', "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfMissing($pdo, 'users', 'updated_at', "timestamp NULL DEFAULT NULL");
     addColumnIfMissing($pdo, 'applications', 'agreed_rate', "decimal(8,2) NULL");
+    addColumnIfMissing($pdo, 'applications', 'address_shared_at', "timestamp NULL DEFAULT NULL");
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS messages (
@@ -186,8 +190,30 @@ function seedAppData(PDO $pdo): void
         (2, 'accepted'),
         (3, 'rejected'),
         (4, 'completed'),
-        (5, 'cancelled')
+        (5, 'cancelled'),
+        (6, 'finalised')
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS reviews (
+            review_id int NOT NULL AUTO_INCREMENT,
+            application_id int NOT NULL,
+            reviewer_id int NOT NULL,
+            reviewee_id int NOT NULL,
+            rating tinyint NOT NULL,
+            body text NULL,
+            created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (review_id),
+            UNIQUE KEY reviews_unique (application_id, reviewer_id),
+            KEY reviews_reviewee_idx (reviewee_id),
+            CONSTRAINT reviews_application_fk FOREIGN KEY (application_id) REFERENCES applications (application_id) ON DELETE CASCADE,
+            CONSTRAINT reviews_reviewer_fk FOREIGN KEY (reviewer_id) REFERENCES users (user_id) ON DELETE CASCADE,
+            CONSTRAINT reviews_reviewee_fk FOREIGN KEY (reviewee_id) REFERENCES users (user_id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    ");
+    addColumnIfMissing($pdo, 'reviews', 'application_id', "int NULL");
+    addColumnIfMissing($pdo, 'reviews', 'body', "text NULL");
+    addColumnIfMissing($pdo, 'reviews', 'created_at', "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
     updateUser($pdo, 1, [
         'name' => 'Sarah Murphy',
@@ -415,6 +441,45 @@ function scheduleDaysFromPost(mixed $days): string
     return implode(',', $clean);
 }
 
+function scheduleGridFromPost(mixed $slots): string
+{
+    $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    $periods = ['morning', 'afternoon', 'evening', 'night'];
+    $allowed = [];
+    foreach ($days as $day) {
+        foreach ($periods as $period) {
+            $allowed[] = "{$day}_{$period}";
+        }
+    }
+    $selected = is_array($slots) ? $slots : [];
+    $clean = array_values(array_intersect($allowed, array_map('strtolower', array_map('strval', $selected))));
+    return implode(',', $clean);
+}
+
+function scheduleGridSummary(?string $grid): string
+{
+    $dayLabels = ['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'];
+    $periodLabels = ['morning' => 'morning', 'afternoon' => 'afternoon', 'evening' => 'evening', 'night' => 'night'];
+    $slots = array_values(array_filter(array_map('trim', explode(',', (string) $grid))));
+    if (!$slots) {
+        return 'Flexible';
+    }
+    $labels = [];
+    foreach ($slots as $slot) {
+        [$day, $period] = array_pad(explode('_', $slot, 2), 2, '');
+        if (isset($dayLabels[$day], $periodLabels[$period])) {
+            $labels[] = $dayLabels[$day] . ' ' . $periodLabels[$period];
+        }
+    }
+    if (!$labels) {
+        return 'Flexible';
+    }
+    if (count($labels) > 3) {
+        return implode(', ', array_slice($labels, 0, 3)) . ' +' . (count($labels) - 3) . ' more';
+    }
+    return implode(', ', $labels);
+}
+
 function scheduleLabel(?string $days): string
 {
     $labels = [
@@ -436,6 +501,146 @@ function scheduleLabel(?string $days): string
     }
     $last = array_pop($names);
     return implode(', ', $names) . ' and ' . $last;
+}
+
+interface AddressAutocompleteProvider
+{
+    public function search(string $query): array;
+}
+
+final class NominatimAddressProvider implements AddressAutocompleteProvider
+{
+    public function search(string $query): array
+    {
+        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+            'q' => $query,
+            'format' => 'jsonv2',
+            'addressdetails' => 1,
+            'countrycodes' => 'ie',
+            'limit' => 6,
+        ]);
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 4,
+                'header' => "User-Agent: LocalLoopAddressAutocomplete/1.0\r\n",
+            ],
+        ]);
+        $json = @file_get_contents($url, false, $context);
+        if (!$json) {
+            return [];
+        }
+        $items = json_decode($json, true);
+        if (!is_array($items)) {
+            return [];
+        }
+        return array_values(array_filter(array_map([$this, 'normalise'], $items)));
+    }
+
+    private function normalise(array $item): ?array
+    {
+        $address = is_array($item['address'] ?? null) ? $item['address'] : [];
+        $road = trim(implode(' ', array_filter([
+            $address['house_number'] ?? '',
+            $address['road'] ?? ($address['pedestrian'] ?? ''),
+        ])));
+        $line1 = $road ?: (string) ($address['amenity'] ?? $address['building'] ?? '');
+        $town = (string) ($address['town'] ?? $address['village'] ?? $address['city'] ?? $address['suburb'] ?? $address['county'] ?? '');
+        if ($town === '') {
+            $town = publicArea((string) ($item['display_name'] ?? 'Balbriggan'));
+        }
+        return [
+            'label' => (string) ($item['display_name'] ?? ''),
+            'address_line1' => $line1,
+            'address_line2' => (string) ($address['neighbourhood'] ?? $address['suburb'] ?? ''),
+            'address_town' => $town,
+            'address_county' => (string) ($address['county'] ?? $address['state'] ?? ''),
+            'eircode' => (string) ($address['postcode'] ?? ''),
+            'country' => (string) ($address['country'] ?? 'Ireland'),
+            'latitude' => nullableCoordinate($item['lat'] ?? null),
+            'longitude' => nullableCoordinate($item['lon'] ?? null),
+        ];
+    }
+}
+
+final class MapboxAddressProvider implements AddressAutocompleteProvider
+{
+    public function __construct(private string $token)
+    {
+    }
+
+    public function search(string $query): array
+    {
+        $url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' . rawurlencode($query) . '.json?' . http_build_query([
+            'access_token' => $this->token,
+            'country' => 'ie',
+            'types' => 'address,postcode,place,locality,neighborhood',
+            'limit' => 6,
+        ]);
+        $json = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 4]]));
+        if (!$json) {
+            return [];
+        }
+        $payload = json_decode($json, true);
+        $features = is_array($payload['features'] ?? null) ? $payload['features'] : [];
+        return array_values(array_filter(array_map([$this, 'normalise'], $features)));
+    }
+
+    private function normalise(array $feature): ?array
+    {
+        $context = is_array($feature['context'] ?? null) ? $feature['context'] : [];
+        $lookup = [];
+        foreach ($context as $item) {
+            $id = (string) ($item['id'] ?? '');
+            $type = strtok($id, '.');
+            if ($type) {
+                $lookup[$type] = (string) ($item['text'] ?? '');
+            }
+        }
+        $coords = is_array($feature['center'] ?? null) ? $feature['center'] : [null, null];
+        $town = (string) ($lookup['place'] ?? $lookup['locality'] ?? $lookup['neighborhood'] ?? $feature['text'] ?? '');
+        return [
+            'label' => (string) ($feature['place_name'] ?? ''),
+            'address_line1' => trim((string) (($feature['address'] ?? '') . ' ' . ($feature['text'] ?? ''))),
+            'address_line2' => '',
+            'address_town' => $town ?: publicArea((string) ($feature['place_name'] ?? 'Balbriggan')),
+            'address_county' => (string) ($lookup['region'] ?? ''),
+            'eircode' => strtoupper((string) ($lookup['postcode'] ?? (($feature['place_type'][0] ?? '') === 'postcode' ? ($feature['text'] ?? '') : ''))),
+            'country' => 'Ireland',
+            'latitude' => nullableCoordinate($coords[1] ?? null),
+            'longitude' => nullableCoordinate($coords[0] ?? null),
+        ];
+    }
+}
+
+function addressAutocompleteProvider(): AddressAutocompleteProvider
+{
+    $mapboxToken = trim((string) getenv('MAPBOX_TOKEN'));
+    if ($mapboxToken !== '') {
+        return new MapboxAddressProvider($mapboxToken);
+    }
+    return new NominatimAddressProvider();
+}
+
+function addressSuggestions(string $query): array
+{
+    $query = trim($query);
+    if (strlen($query) < 3) {
+        return [];
+    }
+    return addressAutocompleteProvider()->search($query);
+}
+
+function isIrelandAddress(array $address): bool
+{
+    return strcasecmp((string) ($address['country'] ?? 'Ireland'), 'Ireland') === 0;
+}
+
+function requireIrishEircode(array $address, string $redirect, string $message = 'Enter an Eircode for Irish addresses.'): void
+{
+    if (isIrelandAddress($address) && trim((string) ($address['eircode'] ?? '')) === '') {
+        flash($message);
+        redirectTo($redirect);
+    }
 }
 
 function scheduleFrequency(?string $days, ?string $fallback = null): string
@@ -596,8 +801,11 @@ function helpers(PDO $pdo, array $filters = [], ?array $user = null): array
     $radius = (float) ($filters['radius'] ?? 10);
     $nearby = !empty($filters['nearby']);
     if ($nearby) {
-        [$baseLat, $baseLng] = defaultSearchPoint($user);
-        $helpers = array_values(array_filter($helpers, function (array $helper) use ($baseLat, $baseLng, $radius): bool {
+        [$baseLat, $baseLng, $baseArea] = defaultSearchPoint($user);
+        $helpers = array_values(array_filter($helpers, function (array $helper) use ($baseLat, $baseLng, $baseArea, $radius): bool {
+            if (strcasecmp(publicArea($helper['neighbourhood'] ?? ''), publicArea($baseArea)) === 0) {
+                return true;
+            }
             $lat = nullableCoordinate($helper['latitude'] ?? null);
             $lng = nullableCoordinate($helper['longitude'] ?? null);
             return $lat === null || $lng === null || distanceKm($baseLat, $baseLng, $lat, $lng) <= $radius;
@@ -657,6 +865,16 @@ function jobs(PDO $pdo, array $filters = []): array
 {
     $where = ["j.status = 'open'"];
     $params = [];
+
+    if (!array_key_exists('include_unavailable', $filters) || !$filters['include_unavailable']) {
+        $where[] = "NOT EXISTS (
+            SELECT 1
+            FROM applications accepted_app
+            JOIN application_status accepted_status ON accepted_status.status_id = accepted_app.application_status_id
+            WHERE accepted_app.job_id = j.job_id
+              AND accepted_status.status_name IN ('accepted', 'finalised', 'completed')
+        )";
+    }
 
     if (!empty($filters['category_id'])) {
         $where[] = 'j.category_id = :category_id';
@@ -725,6 +943,7 @@ function listingMapMarkers(array $jobs): array
             'area' => $area ?: 'Ireland',
             'latitude' => publicMapCoordinate($latitude, $jobId, 0),
             'longitude' => publicMapCoordinate($longitude, $jobId, 1),
+            'radius' => 5000,
             'price' => money($job['pay'] ?? 0),
             'category' => labelize($job['category_name'] ?? 'General help'),
             'image' => (string) ($job['family_avatar'] ?? ''),
@@ -754,6 +973,7 @@ function helperMapMarkers(array $helpers): array
             'area' => publicArea($helper['neighbourhood'] ?? 'Balbriggan'),
             'latitude' => publicMapCoordinate($latitude, $helperId, 0),
             'longitude' => publicMapCoordinate($longitude, $helperId, 1),
+            'radius' => 5000,
             'price' => money($helper['hourly_rate'] ?? 0) . '/hr',
             'category' => $services ? implode(', ', array_map('labelize', $services)) : 'Household help',
             'image' => (string) ($helper['avatar_url'] ?? ''),
@@ -938,11 +1158,49 @@ function userById(PDO $pdo, int $id): ?array
     return $user ?: null;
 }
 
+function privateAddressText(array $user): string
+{
+    $address = addressFromPost([], $user);
+    return $address['full_address'] ?: (string) ($user['full_address'] ?? '');
+}
+
+function reviewFor(PDO $pdo, int $applicationId, int $reviewerId): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM reviews WHERE application_id = :application_id AND reviewer_id = :reviewer_id LIMIT 1");
+    $stmt->execute(['application_id' => $applicationId, 'reviewer_id' => $reviewerId]);
+    $review = $stmt->fetch();
+    return $review ?: null;
+}
+
+function reviewsForJob(PDO $pdo, int $jobId): array
+{
+    $stmt = $pdo->prepare("
+        SELECT r.*, reviewer.name AS reviewer_name, reviewee.name AS reviewee_name
+        FROM reviews r
+        JOIN applications a ON a.application_id = r.application_id
+        JOIN users reviewer ON reviewer.user_id = r.reviewer_id
+        JOIN users reviewee ON reviewee.user_id = r.reviewee_id
+        WHERE a.job_id = :job_id
+        ORDER BY r.created_at DESC
+    ");
+    $stmt->execute(['job_id' => $jobId]);
+    return $stmt->fetchAll();
+}
+
 function myPostedJobs(PDO $pdo, int $userId): array
 {
     $stmt = $pdo->prepare("
         SELECT j.*, c.category_name,
-               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.job_id) AS application_count
+               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.job_id) AS application_count,
+               COALESCE((
+                   SELECT s.status_name
+                   FROM applications a
+                   JOIN application_status s ON s.status_id = a.application_status_id
+                   WHERE a.job_id = j.job_id
+                     AND s.status_name IN ('accepted', 'finalised', 'completed')
+                   ORDER BY FIELD(s.status_name, 'completed', 'finalised', 'accepted')
+                   LIMIT 1
+               ), 'posted') AS booking_status
         FROM jobs j
         LEFT JOIN job_category c ON c.category_id = j.category_id
         WHERE j.family_id = :id
@@ -956,7 +1214,7 @@ function myWorkerApplications(PDO $pdo, int $userId): array
 {
     $stmt = $pdo->prepare("
         SELECT a.*, s.status_name, COALESCE(a.agreed_rate, j.pay) AS agreed_rate,
-               j.title, j.pay, j.location, j.frequency, j.schedule_days, u.name AS family_name
+               j.title, j.pay, j.location, j.frequency, j.schedule_days, j.schedule_grid, u.name AS family_name
         FROM applications a
         LEFT JOIN application_status s ON s.status_id = a.application_status_id
         LEFT JOIN jobs j ON j.job_id = a.job_id
@@ -1004,6 +1262,7 @@ function handlePost(PDO $pdo): void
         $userType = (string) ($_POST['user_type'] ?? 'family');
         $neighbourhood = trim((string) ($_POST['neighbourhood'] ?? 'Balbriggan'));
         $address = addressFromPost($_POST, ['neighbourhood' => $neighbourhood]);
+        requireIrishEircode($address, 'index.php?page=signup');
         $fullAddress = $address['full_address'];
         $latitude = nullableCoordinate($_POST['latitude'] ?? null);
         $longitude = nullableCoordinate($_POST['longitude'] ?? null);
@@ -1083,6 +1342,7 @@ function handlePost(PDO $pdo): void
         $name = trim((string) ($_POST['name'] ?? $current['name']));
         $neighbourhood = trim((string) ($_POST['neighbourhood'] ?? $current['neighbourhood']));
         $address = addressFromPost($_POST, $current);
+        requireIrishEircode($address, 'index.php?page=account');
         $fullAddress = $address['full_address'];
         $latitude = nullableCoordinate($_POST['latitude'] ?? null) ?? nullableCoordinate($current['latitude'] ?? null);
         $longitude = nullableCoordinate($_POST['longitude'] ?? null) ?? nullableCoordinate($current['longitude'] ?? null);
@@ -1100,12 +1360,14 @@ function handlePost(PDO $pdo): void
             'latitude' => $latitude,
             'longitude' => $longitude,
             'bio' => trim((string) ($_POST['bio'] ?? $current['bio'] ?? '')),
+            'updated_at' => date('Y-m-d H:i:s'),
         ];
 
         if (($current['user_type'] ?? '') === 'worker') {
             $data['hourly_rate'] = (float) ($_POST['hourly_rate'] ?? $current['hourly_rate'] ?? 0);
             $data['experience_years'] = max(0, (int) ($_POST['experience_years'] ?? $current['experience_years'] ?? 0));
             $data['availability_note'] = trim((string) ($_POST['availability_note'] ?? $current['availability_note'] ?? ''));
+            $data['availability_grid'] = scheduleGridFromPost($_POST['availability_grid'] ?? []);
             $categoryIds = $_POST['category_ids'] ?? [];
             setWorkerCategories($pdo, (int) $current['user_id'], is_array($categoryIds) ? $categoryIds : [$categoryIds], trim((string) ($_POST['category_reason'] ?? '')));
         }
@@ -1121,17 +1383,27 @@ function handlePost(PDO $pdo): void
             redirectTo('index.php?page=account');
         }
 
-        $address = addressFromPost($_POST, $current);
+        $useDifferentAddress = isset($_POST['use_different_location']);
+        $address = $useDifferentAddress ? addressFromPost($_POST, $current) : addressFromPost([], $current);
+        if ($useDifferentAddress) {
+            requireIrishEircode($address, 'index.php?page=account#post-job', 'Enter an Eircode for the different job location.');
+        }
         $location = $address['address_town'] ?: trim((string) ($_POST['location'] ?? $current['neighbourhood'] ?? 'Ireland'));
         $fullAddress = $address['full_address'];
-        $latitude = nullableCoordinate($_POST['latitude'] ?? null) ?? nullableCoordinate($current['latitude'] ?? null);
-        $longitude = nullableCoordinate($_POST['longitude'] ?? null) ?? nullableCoordinate($current['longitude'] ?? null);
+        $latitude = $useDifferentAddress ? nullableCoordinate($_POST['latitude'] ?? null) : nullableCoordinate($current['latitude'] ?? null);
+        $longitude = $useDifferentAddress ? nullableCoordinate($_POST['longitude'] ?? null) : nullableCoordinate($current['longitude'] ?? null);
+        $latitude = $latitude ?? nullableCoordinate($current['latitude'] ?? null);
+        $longitude = $longitude ?? nullableCoordinate($current['longitude'] ?? null);
         $scheduleDays = scheduleDaysFromPost($_POST['schedule_days'] ?? []);
+        $scheduleGrid = scheduleGridFromPost($_POST['schedule_grid'] ?? []);
         $frequency = scheduleFrequency($scheduleDays, trim((string) ($_POST['frequency'] ?? '')));
+        if ($scheduleGrid !== '') {
+            $frequency = scheduleGridSummary($scheduleGrid);
+        }
 
         $stmt = $pdo->prepare("
-            INSERT INTO jobs (category_id, title, description, pay, family_id, location, full_address, address_line1, address_line2, address_town, address_county, eircode, country, latitude, longitude, frequency, schedule_days, preferred_start_date, notes, scheduled_at, is_recurring, status)
-            VALUES (:category_id, :title, :description, :pay, :family_id, :location, :full_address, :address_line1, :address_line2, :address_town, :address_county, :eircode, :country, :latitude, :longitude, :frequency, :schedule_days, :preferred_start_date, :notes, :scheduled_at, :is_recurring, 'open')
+            INSERT INTO jobs (category_id, title, description, pay, family_id, location, full_address, address_line1, address_line2, address_town, address_county, eircode, country, latitude, longitude, frequency, schedule_days, schedule_grid, preferred_start_date, notes, scheduled_at, is_recurring, status)
+            VALUES (:category_id, :title, :description, :pay, :family_id, :location, :full_address, :address_line1, :address_line2, :address_town, :address_county, :eircode, :country, :latitude, :longitude, :frequency, :schedule_days, :schedule_grid, :preferred_start_date, :notes, :scheduled_at, :is_recurring, 'open')
         ");
         $stmt->execute([
             'category_id' => (int) ($_POST['category_id'] ?? 7),
@@ -1151,9 +1423,10 @@ function handlePost(PDO $pdo): void
             'longitude' => $longitude,
             'frequency' => $frequency,
             'schedule_days' => $scheduleDays ?: null,
-            'preferred_start_date' => !empty($_POST['preferred_start_date']) ? (string) $_POST['preferred_start_date'] : null,
+            'schedule_grid' => $scheduleGrid ?: null,
+            'preferred_start_date' => null,
             'notes' => trim((string) ($_POST['notes'] ?? '')),
-            'scheduled_at' => !empty($_POST['scheduled_at']) ? str_replace('T', ' ', (string) $_POST['scheduled_at']) . ':00' : null,
+            'scheduled_at' => null,
             'is_recurring' => isset($_POST['is_recurring']) ? 1 : 0,
         ]);
         flash('Your job listing is live.');
@@ -1168,10 +1441,30 @@ function handlePost(PDO $pdo): void
             redirectTo('index.php?page=job&id=' . $jobId);
         }
 
-        $ownerCheck = $pdo->prepare("SELECT family_id FROM jobs WHERE job_id = :job_id");
+        $ownerCheck = $pdo->prepare("
+            SELECT j.family_id,
+                   EXISTS (
+                       SELECT 1
+                       FROM applications a
+                       JOIN application_status s ON s.status_id = a.application_status_id
+                       WHERE a.job_id = j.job_id
+                         AND s.status_name IN ('accepted', 'finalised', 'completed')
+                   ) AS is_unavailable
+            FROM jobs j
+            WHERE j.job_id = :job_id
+        ");
         $ownerCheck->execute(['job_id' => $jobId]);
-        if ((int) $ownerCheck->fetchColumn() === $workerId) {
+        $jobCheck = $ownerCheck->fetch();
+        if (!$jobCheck) {
+            flash('That job is not available.');
+            redirectTo('index.php?page=jobs');
+        }
+        if ((int) $jobCheck['family_id'] === $workerId) {
             flash('You cannot apply to your own job.');
+            redirectTo('index.php?page=job&id=' . $jobId);
+        }
+        if ((int) $jobCheck['is_unavailable'] === 1) {
+            flash('That job has already been accepted.');
             redirectTo('index.php?page=job&id=' . $jobId);
         }
 
@@ -1232,7 +1525,7 @@ function handlePost(PDO $pdo): void
     if ($action === 'update_application_status') {
         $applicationId = (int) ($_POST['application_id'] ?? 0);
         $status = (string) ($_POST['status'] ?? 'pending');
-        $allowedStatuses = ['accepted', 'rejected', 'cancelled'];
+        $allowedStatuses = ['accepted', 'rejected', 'cancelled', 'finalised', 'completed'];
         if (!in_array($status, $allowedStatuses, true)) {
             $status = 'pending';
         }
@@ -1245,61 +1538,115 @@ function handlePost(PDO $pdo): void
               AND (
                   (:transition_status IN ('accepted', 'rejected') AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'pending' LIMIT 1))
                   OR (:cancel_status = 'cancelled' AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'accepted' LIMIT 1))
+                  OR (:finalise_status = 'finalised' AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'accepted' LIMIT 1))
+                  OR (:complete_status = 'completed' AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'finalised' LIMIT 1))
               )
         ");
         $stmt->execute([
             'status' => $status,
             'transition_status' => $status,
             'cancel_status' => $status,
+            'finalise_status' => $status,
+            'complete_status' => $status,
             'application_id' => $applicationId,
             'family_id' => (int) $current['user_id'],
         ]);
+        if ($status === 'accepted' && $stmt->rowCount() > 0) {
+            $pdo->prepare("
+                UPDATE applications other_app
+                JOIN applications accepted_app ON accepted_app.job_id = other_app.job_id
+                SET other_app.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'rejected' LIMIT 1)
+                WHERE accepted_app.application_id = :application_id
+                  AND other_app.application_id <> accepted_app.application_id
+                  AND other_app.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'pending' LIMIT 1)
+            ")->execute(['application_id' => $applicationId]);
+        }
         flash($stmt->rowCount() > 0 ? 'Application updated.' : 'That application cannot be updated from this account.');
         redirectTo($_POST['redirect'] ?? 'index.php?page=account');
     }
 
     if ($action === 'finalize_payment') {
         $applicationId = (int) ($_POST['application_id'] ?? 0);
-        $amount = (float) ($_POST['amount'] ?? 0);
-        $scheduledFor = !empty($_POST['scheduled_for']) ? str_replace('T', ' ', (string) $_POST['scheduled_for']) . ':00' : null;
-
-        $ownerCheck = $pdo->prepare("
-            SELECT COUNT(*)
-            FROM applications a
+        $stmt = $pdo->prepare("
+            UPDATE applications a
             JOIN jobs j ON j.job_id = a.job_id
+            SET a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'finalised' LIMIT 1)
             WHERE a.application_id = :application_id
               AND j.family_id = :family_id
+              AND a.application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'accepted' LIMIT 1)
         ");
-        $ownerCheck->execute([
+        $stmt->execute([
             'application_id' => $applicationId,
             'family_id' => (int) $current['user_id'],
         ]);
-        if ((int) $ownerCheck->fetchColumn() === 0) {
-            flash('That booking cannot be finalized from this account.');
-            redirectTo($_POST['redirect'] ?? 'index.php?page=account');
-        }
-
-        $payment = $pdo->prepare("
-            INSERT INTO payments (application_id, amount, payment_status, paid_at)
-            VALUES (:application_id, :amount, 'paid', CURRENT_TIMESTAMP)
-        ");
-        $payment->execute(['application_id' => $applicationId, 'amount' => $amount]);
-
-        $booking = $pdo->prepare("
-            INSERT INTO bookings (application_id, scheduled_for, booking_status)
-            VALUES (:application_id, :scheduled_for, 'confirmed')
-        ");
-        $booking->execute(['application_id' => $applicationId, 'scheduled_for' => $scheduledFor]);
-
-        $update = $pdo->prepare("
-            UPDATE applications
-            SET application_status_id = (SELECT status_id FROM application_status WHERE status_name = 'completed' LIMIT 1)
-            WHERE application_id = :application_id
-        ");
-        $update->execute(['application_id' => $applicationId]);
-
-        flash('Booking finalized and payment recorded.');
+        flash($stmt->rowCount() > 0 ? 'Booking finalised. Payment is arranged directly for now; in-platform payments are coming later.' : 'That booking cannot be finalised from this account.');
         redirectTo($_POST['redirect'] ?? 'index.php?page=messages');
+    }
+
+    if ($action === 'share_private_address') {
+        $applicationId = (int) ($_POST['application_id'] ?? 0);
+        $stmt = $pdo->prepare("
+            SELECT a.*, j.job_id, j.family_id, a.worker_id
+            FROM applications a
+            JOIN jobs j ON j.job_id = a.job_id
+            JOIN application_status s ON s.status_id = a.application_status_id
+            WHERE a.application_id = :application_id
+              AND j.family_id = :family_id
+              AND s.status_name IN ('accepted', 'finalised', 'completed')
+            LIMIT 1
+        ");
+        $stmt->execute(['application_id' => $applicationId, 'family_id' => (int) $current['user_id']]);
+        $application = $stmt->fetch();
+        if ($application) {
+            $address = privateAddressText($current);
+            if ($address !== '') {
+                $message = $pdo->prepare("
+                    INSERT INTO messages (job_id, sender_id, receiver_id, body)
+                    VALUES (:job_id, :sender_id, :receiver_id, :body)
+                ");
+                $message->execute([
+                    'job_id' => (int) $application['job_id'],
+                    'sender_id' => (int) $current['user_id'],
+                    'receiver_id' => (int) $application['worker_id'],
+                    'body' => '[PRIVATE_ADDRESS]' . $address,
+                ]);
+                $pdo->prepare("UPDATE applications SET address_shared_at = CURRENT_TIMESTAMP WHERE application_id = :id")->execute(['id' => $applicationId]);
+                flash('Private address shared in the message thread.');
+            }
+        }
+        redirectTo($_POST['redirect'] ?? 'index.php?page=messages');
+    }
+
+    if ($action === 'leave_review') {
+        $applicationId = (int) ($_POST['application_id'] ?? 0);
+        $rating = min(5, max(1, (int) ($_POST['rating'] ?? 5)));
+        $body = trim((string) ($_POST['body'] ?? ''));
+        $stmt = $pdo->prepare("
+            SELECT a.*, j.family_id
+            FROM applications a
+            JOIN jobs j ON j.job_id = a.job_id
+            JOIN application_status s ON s.status_id = a.application_status_id
+            WHERE a.application_id = :application_id AND s.status_name = 'completed'
+            LIMIT 1
+        ");
+        $stmt->execute(['application_id' => $applicationId]);
+        $application = $stmt->fetch();
+        if ($application && in_array((int) $current['user_id'], [(int) $application['family_id'], (int) $application['worker_id']], true)) {
+            $reviewee = (int) $current['user_id'] === (int) $application['family_id'] ? (int) $application['worker_id'] : (int) $application['family_id'];
+            $insert = $pdo->prepare("
+                INSERT IGNORE INTO reviews (application_id, reviewer_id, reviewee_id, rating, body)
+                VALUES (:application_id, :reviewer_id, :reviewee_id, :rating, :body)
+            ");
+            $insert->execute([
+                'application_id' => $applicationId,
+                'reviewer_id' => (int) $current['user_id'],
+                'reviewee_id' => $reviewee,
+                'rating' => $rating,
+                'body' => $body,
+            ]);
+            flash('Review saved.');
+        }
+        redirectTo($_POST['redirect'] ?? 'index.php?page=account');
     }
 }
 

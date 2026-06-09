@@ -163,6 +163,123 @@ img {
     font-weight: 700;
 }
 
+.nav-icon-button,
+.account-menu-button {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    min-width: 44px;
+    height: 44px;
+    color: var(--navy);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(18, 56, 74, 0.06);
+}
+
+.account-menu-button {
+    grid-template-columns: auto auto;
+    gap: 8px;
+    padding: 3px 5px 3px 14px;
+}
+
+.avatar-menu {
+    width: 34px;
+    height: 34px;
+    font-size: 0.72rem;
+}
+
+.sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(18, 56, 74, 0.28);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.sidebar-backdrop.is-open {
+    opacity: 1;
+}
+
+.account-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 41;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 22px;
+    width: min(420px, 92vw);
+    height: 100vh;
+    height: 100dvh;
+    padding: 24px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    color: var(--navy);
+    background: #fff;
+    box-shadow: -20px 0 45px rgba(18, 56, 74, 0.22);
+    transform: translateX(105%);
+    transition: transform 0.24s ease;
+}
+
+.account-sidebar.is-open {
+    transform: translateX(0);
+}
+
+.sidebar-close {
+    justify-self: start;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    color: var(--navy);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-size: 1.3rem;
+    cursor: pointer;
+}
+
+.sidebar-profile {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.sidebar-profile span {
+    color: var(--muted);
+}
+
+.sidebar-links {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+}
+
+.sidebar-links a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 50px;
+    padding: 0 16px;
+    color: var(--navy);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-weight: 850;
+}
+
+.sidebar-links a:hover {
+    color: var(--green-dark);
+    background: var(--green-soft);
+}
+
+.sidebar-logout {
+    margin: 0;
+}
+
 .button {
     display: inline-flex;
     align-items: center;
@@ -837,6 +954,350 @@ h3 {
     font-weight: 700;
 }
 
+.address-search-label {
+    position: relative;
+}
+
+.address-loading {
+    position: absolute;
+    top: 34px;
+    right: 12px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.address-suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 12;
+    overflow: auto;
+    max-height: 240px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.address-suggestions button,
+.address-suggestion-empty {
+    display: block;
+    width: 100%;
+    padding: 11px 12px;
+    color: var(--navy);
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+}
+
+.address-suggestions button:hover,
+.address-suggestions button:focus {
+    background: var(--green-soft);
+    outline: 0;
+}
+
+.availability-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 5px;
+    grid-column: 1 / -1;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+}
+
+.availability-grid strong,
+.availability-grid em,
+.availability-grid label,
+.availability-grid > span {
+    display: grid;
+    place-items: center;
+    min-height: 34px;
+    margin: 0;
+    border-radius: 7px;
+    font-size: 0.78rem;
+}
+
+.availability-grid strong,
+.availability-grid em {
+    color: var(--navy);
+    background: #eef4f1;
+    font-style: normal;
+    font-weight: 900;
+}
+
+.availability-grid em {
+    grid-column: 1 / -1;
+    justify-content: start;
+    padding: 0 10px;
+}
+
+.availability-grid label,
+.availability-grid.is-readonly > span {
+    background: #f8faf9;
+    border: 1px solid var(--line);
+}
+
+.availability-grid input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.availability-grid label span {
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    text-indent: -999px;
+}
+
+.availability-grid label.is-selected,
+.availability-grid.is-readonly > span.is-selected {
+    position: relative;
+    background: var(--green-dark);
+    border-color: var(--green-dark);
+}
+
+.availability-grid.is-readonly > span.is-selected::after {
+    content: "✓";
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.availability-grid.is-readonly > span.is-selected::after {
+    content: "\2713";
+}
+
+.profile-availability-card {
+    display: grid;
+    gap: 12px;
+}
+
+.profile-availability-card > span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.profile-availability-card p,
+.availability-summary {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.availability-grid {
+    --slot-size: 28px;
+    display: grid;
+    grid-template-columns: minmax(78px, 82px) repeat(7, minmax(var(--slot-size), var(--slot-size)));
+    justify-content: start;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 12px;
+    width: 100%;
+    max-width: 520px;
+}
+
+.availability-grid::before {
+    content: "";
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.availability-grid strong,
+.availability-grid em,
+.availability-grid label,
+.availability-grid > span {
+    min-height: var(--slot-size);
+    border-radius: 999px;
+    background: transparent;
+    border: 0;
+}
+
+.availability-grid strong {
+    color: var(--navy);
+    font-size: 0.95em;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.availability-grid em {
+    grid-column: auto;
+    justify-content: start;
+    padding: 0;
+    color: var(--navy);
+    font-size: 0.95em;
+    font-style: normal;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.availability-grid label,
+.availability-grid.is-readonly > span {
+    width: var(--slot-size);
+    height: var(--slot-size);
+    min-height: var(--slot-size);
+    background: #d9e3df;
+    border: 0;
+    border-radius: 999px;
+}
+
+.availability-grid.is-readonly > span:not(.is-selected),
+.availability-grid label:not(.is-selected) {
+    background: #cbd6d2;
+}
+
+.availability-grid label.is-selected,
+.availability-grid.is-readonly > span.is-selected {
+    background: #6fc7cf;
+    border-color: #6fc7cf;
+}
+
+.availability-grid label::after,
+.availability-grid.is-readonly > span.is-selected::after {
+    content: "\2713";
+    color: var(--navy);
+    font-size: 0.88rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.availability-grid label:not(.is-selected)::after {
+    content: "";
+}
+
+.availability-grid label span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.schedule-picker .availability-grid,
+.profile-availability-card .availability-grid,
+.job-schedule-card .availability-grid {
+    --slot-size: 28px;
+    max-width: 100%;
+    column-gap: 8px;
+    row-gap: 10px;
+}
+
+.address-share-card,
+.review-box,
+.pay-box {
+    display: grid;
+    gap: 10px;
+}
+
+.address-share-card {
+    padding: 12px;
+    color: var(--navy);
+    background: var(--green-soft);
+    border-radius: 8px;
+}
+
+.address-share-card p,
+.pay-box p {
+    margin: 0;
+}
+
+.review-box {
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.star-rating {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.star-rating legend {
+    width: 100%;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.star-rating input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.star-rating label {
+    color: #cbd4d9;
+    font-size: 1.45rem;
+    cursor: pointer;
+    transition: color 0.14s ease, transform 0.14s ease;
+}
+
+.star-rating label:hover,
+.star-rating label:hover ~ label,
+.star-rating input:checked ~ label {
+    color: #f4b740;
+}
+
+.star-rating label:hover {
+    transform: translateY(-1px);
+}
+
+.review-list {
+    display: grid;
+    gap: 12px;
+}
+
+.review-card {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.review-card p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.review-stars {
+    color: #f4b740;
+}
+
+.different-location {
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.different-location summary {
+    color: var(--navy);
+    cursor: pointer;
+    font-weight: 900;
+}
+
+.different-location .address-fieldset {
+    margin-top: 12px;
+}
+
 .week-selector {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -904,12 +1365,14 @@ h3 {
 }
 
 .status-accepted,
-.status-completed {
+.status-completed,
+.status-finalised {
     color: var(--green-dark);
     background: var(--green-soft);
 }
 
-.status-rejected {
+.status-rejected,
+.status-cancelled {
     color: var(--danger);
     background: #fff0f0;
 }
@@ -1146,14 +1609,31 @@ h3 {
     font-weight: 800;
 }
 
-.legend-dot,
-.map-marker span {
+.legend-dot {
     display: inline-block;
     width: 14px;
     height: 14px;
     border: 3px solid #fff;
     border-radius: 50%;
     box-shadow: 0 4px 12px rgba(18, 56, 74, 0.28);
+}
+
+.map-marker span {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    color: #fff;
+    border: 3px solid #fff;
+    border-radius: 50% 50% 50% 8px;
+    box-shadow: 0 8px 20px rgba(18, 56, 74, 0.28);
+    transform: rotate(-45deg);
+}
+
+.map-marker span i {
+    font-size: 0.86rem;
+    transform: rotate(45deg);
 }
 
 .job-dot {
@@ -1165,11 +1645,21 @@ h3 {
 }
 
 .map-marker .job-marker {
-    background: var(--green);
+    background: var(--green-dark);
 }
 
 .map-marker .worker-marker {
-    background: var(--blue);
+    background: #6fc7cf;
+}
+
+.leaflet-container {
+    background: #edf3ef;
+    font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    box-shadow: 0 16px 32px rgba(18, 56, 74, 0.18);
 }
 
 .leaflet-popup-content {
@@ -1255,6 +1745,140 @@ h3 {
     grid-template-columns: minmax(0, 1fr) 380px;
     gap: 24px;
     align-items: start;
+}
+
+.job-detail-page {
+    max-width: 1060px;
+}
+
+.job-detail-clean {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+    gap: 22px;
+    align-items: start;
+}
+
+.job-detail-card,
+.job-schedule-card {
+    display: grid;
+    gap: 22px;
+    min-width: 0;
+    padding: 28px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.job-detail-card h1 {
+    margin: 0;
+    max-width: 820px;
+    font-size: clamp(2rem, 4.8vw, 3.5rem);
+    line-height: 1;
+}
+
+.job-key-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.job-key-stats div {
+    display: grid;
+    gap: 3px;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 8px;
+}
+
+.job-key-stats span,
+.schedule-card-heading span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.job-key-stats strong {
+    color: var(--navy);
+    font-size: 1.15rem;
+}
+
+.job-info-section {
+    display: grid;
+    gap: 8px;
+}
+
+.job-info-section h2 {
+    margin: 0;
+    color: var(--navy);
+    font-size: 1.25rem;
+}
+
+.job-info-section p {
+    margin: 0;
+    color: #53656e;
+    font-size: 1.02rem;
+}
+
+.job-notes-section {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.job-notes-section h2 {
+    margin: 0;
+    color: var(--navy);
+    font-size: 1rem;
+}
+
+.job-notes-section p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.94rem;
+    line-height: 1.6;
+}
+
+.job-schedule-card {
+    position: sticky;
+    top: 126px;
+}
+
+.schedule-card-heading {
+    display: grid;
+    gap: 5px;
+}
+
+.schedule-card-heading strong {
+    color: var(--navy);
+    line-height: 1.25;
+}
+
+.job-schedule-card .availability-grid {
+    gap: 4px;
+}
+
+.job-schedule-card .availability-grid strong,
+.job-schedule-card .availability-grid em,
+.job-schedule-card .availability-grid > span {
+    min-height: var(--slot-size);
+    font-size: 0.95em;
+}
+
+.owner-requests {
+    margin-top: 4px;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+}
+
+.owner-requests summary {
+    color: var(--green-dark);
+    cursor: pointer;
+    font-weight: 900;
 }
 
 .detail-main,
@@ -1772,6 +2396,139 @@ h3 {
     border-radius: 8px;
 }
 
+@media (prefers-color-scheme: dark) {
+    :root {
+        --green: #69d39c;
+        --green-dark: #77e0aa;
+        --green-soft: rgba(105, 211, 156, 0.14);
+        --navy: #eaf6f3;
+        --ink: #eef4f2;
+        --muted: #a9b8b5;
+        --line: #2d403d;
+        --panel: #17211f;
+        --surface: #0e1715;
+        --blue: #7ad0dc;
+        --warning: #332c16;
+        --shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+    }
+
+    body,
+    .topbar,
+    .account-sidebar,
+    .site-footer {
+        background: var(--surface);
+    }
+
+    .topbar {
+        border-color: var(--line);
+    }
+
+    .nav-shell,
+    .topline,
+    .nav-links a,
+    .icon-link,
+    .nav-icon-button,
+    .account-menu-button,
+    .sidebar-close,
+    .sidebar-links a {
+        color: var(--navy);
+    }
+
+    .nav-icon-button,
+    .account-menu-button,
+    .sidebar-close,
+    .sidebar-links a,
+    .account-sidebar,
+    .job-card,
+    .worker-card,
+    .helper-card,
+    .helper-card-wide,
+    .filter-panel,
+    .account-panel,
+    .account-main,
+    .auth-card,
+    .job-detail-card,
+    .job-schedule-card,
+    .map-pane,
+    .map-panel,
+    .thread-panel,
+    .conversation-list,
+    .review-card,
+    .review-box,
+    .different-location,
+    .job-notes-section,
+    .job-key-stats div,
+    .address-fieldset,
+    .schedule-picker,
+    .category-picker,
+    .empty-state,
+    .secure-banner {
+        background: var(--panel);
+        border-color: var(--line);
+    }
+
+    input,
+    select,
+    textarea {
+        color: var(--ink);
+        background: #101b19;
+        border-color: var(--line);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: #778984;
+    }
+
+    .button-secondary,
+    .mobile-view-toggle,
+    .address-suggestions,
+    .activity-row,
+    .bubble,
+    .map-privacy-note,
+    .availability-grid strong,
+    .availability-grid em,
+    .availability-grid label:not(.is-selected),
+    .availability-grid.is-readonly > span:not(.is-selected),
+    .setup-error code {
+        background: #101b19;
+        border-color: var(--line);
+    }
+
+    .bubble.mine {
+        background: var(--green-soft);
+    }
+
+    .leaflet-container {
+        background: #111c1a;
+        filter: brightness(0.88) contrast(1.06) saturate(0.86);
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+        color: var(--ink);
+        background: var(--panel);
+    }
+
+    .map-popup-card span,
+    .job-info-section p,
+    .job-notes-section p,
+    .review-card p {
+        color: var(--muted);
+    }
+
+    .star-rating label {
+        color: #52635f;
+    }
+
+    .star-rating label:hover,
+    .star-rating label:hover ~ label,
+    .star-rating input:checked ~ label,
+    .review-stars {
+        color: #f8c34a;
+    }
+}
+
 @media (max-width: 980px) {
     .nav-shell,
     .topline,
@@ -1795,6 +2552,7 @@ h3 {
     .browse-layout,
     .map-layout,
     .listing-results-layout,
+    .job-detail-clean,
     .detail-layout,
     .worker-profile-layout,
     .account-grid {
@@ -1804,6 +2562,7 @@ h3 {
     .hero-visual,
     .filter-panel,
     .map-pane,
+    .job-schedule-card,
     .account-panel {
         position: static;
     }
@@ -1878,6 +2637,30 @@ h3 {
     .address-fieldset,
     .schedule-picker,
     .week-selector {
+        grid-template-columns: 1fr;
+    }
+
+    .availability-grid,
+    .job-schedule-card .availability-grid {
+        --slot-size: 22px;
+        grid-template-columns: minmax(78px, 82px) repeat(7, minmax(var(--slot-size), var(--slot-size)));
+        gap: 4px;
+    }
+
+    .availability-grid strong,
+    .availability-grid em,
+    .availability-grid label,
+    .availability-grid > span {
+        min-height: var(--slot-size);
+        font-size: 0.95em;
+    }
+
+    .job-detail-card,
+    .job-schedule-card {
+        padding: 20px;
+    }
+
+    .job-key-stats {
         grid-template-columns: 1fr;
     }
 

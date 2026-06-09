@@ -18,6 +18,16 @@ try {
     $notice = null;
 }
 
+if ($page === 'address_suggest') {
+    header('Content-Type: application/json');
+    try {
+        echo json_encode(['results' => addressSuggestions((string) ($_GET['q'] ?? ''))], JSON_THROW_ON_ERROR);
+    } catch (Throwable) {
+        echo json_encode(['results' => []], JSON_THROW_ON_ERROR);
+    }
+    exit;
+}
+
 function activePage(string $page, string $current): string
 {
     return $page === $current ? ' is-active' : '';
@@ -38,7 +48,7 @@ function renderHeader(PDO $pdo, ?array $user, string $page, ?string $notice): vo
     <header class="topbar">
         <div class="topline">
             <span><i class="fa-solid fa-location-dot"></i> Your area: <strong><?= h($area) ?></strong></span>
-            <span>Local jobs, messages, bookings, and payments in one place</span>
+            <span>Local jobs, messages, and booking records in one place</span>
         </div>
         <nav class="nav-shell" aria-label="Main navigation">
             <a class="brand" href="index.php">
@@ -47,42 +57,66 @@ function renderHeader(PDO $pdo, ?array $user, string $page, ?string $notice): vo
             </a>
             <div class="nav-links">
                 <?php if (!$isWorker): ?>
-                    <a class="<?= activePage('helpers', $page) ?>" href="index.php?page=helpers">Find Helpers</a>
+                    <a class="<?= activePage('helpers', $page) ?>" href="index.php?page=helpers"><?= $isFamily ? 'Find Local Helpers' : 'Find Helpers' ?></a>
                 <?php endif; ?>
                 <?php if (!$user || !$isFamily): ?>
                     <a class="<?= activePage('jobs', $page) ?>" href="index.php?page=jobs">Find Jobs</a>
                 <?php endif; ?>
                 <a class="<?= activePage('how', $page) ?>" href="index.php?page=how">How it works</a>
-                <?php if (!$user || $isFamily): ?>
-                    <a class="<?= activePage('account', $page) ?>" href="<?= $user ? 'index.php?page=account#post-job' : 'index.php?page=signup' ?>">Post a Job</a>
-                <?php endif; ?>
-                <a class="<?= activePage('messages', $page) ?>" href="<?= $user ? 'index.php?page=messages' : 'index.php?page=login' ?>">
-                    Messages
-                    <?php if ($unread > 0): ?>
-                        <span class="badge"><?= $unread ?></span>
-                    <?php endif; ?>
-                </a>
             </div>
             <div class="nav-actions">
                 <?php if ($user): ?>
-                    <a class="icon-link" href="index.php?page=account" title="Account">
-                        <i class="fa-regular fa-user"></i>
-                        <span><?= h(explode(' ', (string) $user['name'])[0]) ?></span>
+                    <a class="nav-icon-button" href="index.php?page=account#jobs-accepted" title="Bookings" aria-label="Bookings">
+                        <i class="fa-regular fa-calendar-check"></i>
                     </a>
-                    <?php if ($isFamily): ?>
-                        <a class="button button-primary button-small" href="index.php?page=account#post-job">Post a Job</a>
-                    <?php endif; ?>
-                    <form action="index.php" method="post" class="logout-form">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="action" value="logout">
-                        <button class="text-button" type="submit">Log Out</button>
-                    </form>
+                    <a class="nav-icon-button" href="index.php?page=messages" title="Messages" aria-label="Messages">
+                        <i class="fa-regular fa-comment"></i>
+                        <?php if ($unread > 0): ?>
+                            <span class="badge"><?= $unread ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <button class="account-menu-button" type="button" data-sidebar-open aria-label="Open account menu">
+                        <i class="fa-solid fa-bars"></i>
+                        <?= avatar($user, 'avatar avatar-menu') ?>
+                    </button>
                 <?php else: ?>
                     <a class="icon-link" href="index.php?page=login">Log In</a>
                     <a class="button button-primary button-small" href="index.php?page=signup">Sign Up</a>
                 <?php endif; ?>
             </div>
         </nav>
+        <?php if ($user): ?>
+            <div class="sidebar-backdrop" data-sidebar-backdrop hidden></div>
+            <aside class="account-sidebar" data-account-sidebar aria-hidden="true">
+                <button class="sidebar-close" type="button" data-sidebar-close aria-label="Close account menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div class="sidebar-profile">
+                    <?= avatar($user, 'avatar avatar-xl') ?>
+                    <strong><?= h($user['name']) ?></strong>
+                    <span><?= h(publicRoleLabel($user['user_type'] ?? null)) ?> in <?= h($area) ?></span>
+                </div>
+                <nav class="sidebar-links" aria-label="Account menu">
+                    <a href="index.php?page=account"><i class="fa-regular fa-user"></i> Edit profile</a>
+                    <?php if ($isFamily): ?>
+                        <a href="index.php?page=account#post-job"><i class="fa-solid fa-plus"></i> Post a job</a>
+                        <a href="index.php?page=account#jobs-posted"><i class="fa-regular fa-clipboard"></i> Jobs posted</a>
+                        <a href="index.php?page=account#jobs-accepted"><i class="fa-regular fa-calendar-check"></i> Jobs accepted / bookings</a>
+                    <?php else: ?>
+                        <a href="index.php?page=jobs"><i class="fa-solid fa-magnifying-glass"></i> Find jobs</a>
+                        <a href="index.php?page=account#jobs-accepted"><i class="fa-regular fa-calendar-check"></i> Jobs accepted</a>
+                    <?php endif; ?>
+                    <a href="index.php?page=account#jobs-completed"><i class="fa-solid fa-check"></i> Jobs completed</a>
+                    <a href="index.php?page=messages"><i class="fa-regular fa-comment"></i> Messages</a>
+                    <a href="index.php?page=account"><i class="fa-solid fa-gear"></i> Account settings</a>
+                </nav>
+                <form action="index.php" method="post" class="sidebar-logout">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="logout">
+                    <button class="button button-secondary button-full" type="submit">Log Out</button>
+                </form>
+            </aside>
+        <?php endif; ?>
         <?php if ($notice): ?>
             <div class="flash"><?= h($notice) ?></div>
         <?php endif; ?>
@@ -96,7 +130,7 @@ function renderFooter(): void
     <footer class="site-footer">
         <div>
             <strong>LocalLoop</strong>
-            <span>Neighborhood help, booked locally.</span>
+            <span>Local household help, arranged nearby.</span>
         </div>
         <div class="footer-links">
             <a href="index.php?page=helpers">Find Helpers</a>
@@ -219,7 +253,7 @@ function renderHome(PDO $pdo, ?array $user): void
                 <article>
                     <span>3</span>
                     <h3>Book / arrange work</h3>
-                    <p>Use bookings and payment records in your account once both sides are ready.</p>
+                    <p>Use messages and booking records once both sides are ready.</p>
                 </article>
             </div>
         </section>
@@ -242,8 +276,11 @@ function renderHome(PDO $pdo, ?array $user): void
     <?php
 }
 
-function renderHowPage(): void
+function renderHowPage(?array $user): void
 {
+    $getStartedUrl = !$user
+        ? 'index.php?page=signup'
+        : (($user['user_type'] ?? '') === 'worker' ? 'index.php?page=jobs' : 'index.php?page=helpers');
     ?>
     <main class="page-shell">
         <section class="page-heading">
@@ -252,7 +289,7 @@ function renderHowPage(): void
                 <h1>Household help, arranged clearly.</h1>
                 <p class="page-subtitle">LocalLoop helps families and helpers find each other, talk through the work, and keep booking records in one place.</p>
             </div>
-            <a class="button button-primary" href="index.php?page=signup">Get started</a>
+            <a class="button button-primary" href="<?= h($getStartedUrl) ?>">Get Started</a>
         </section>
         <section class="section-shell how-steps">
             <div class="steps-grid">
@@ -269,7 +306,7 @@ function renderHowPage(): void
                 <article>
                     <span>3</span>
                     <h3>Book / arrange work</h3>
-                    <p>Agree details privately, then keep applications, bookings, and payment records together.</p>
+                    <p>Agree details privately, then keep applications and booking records together.</p>
                 </article>
             </div>
         </section>
@@ -480,27 +517,37 @@ function renderAddressFields(array $values = [], string $mode = 'account'): void
     $county = (string) ($values['address_county'] ?? '');
     $eircode = (string) ($values['eircode'] ?? '');
     $country = (string) ($values['country'] ?? 'Ireland');
+    $eircodeRequired = strcasecmp($country ?: 'Ireland', 'Ireland') === 0;
+    $latitude = (string) ($values['latitude'] ?? '');
+    $longitude = (string) ($values['longitude'] ?? '');
     ?>
-    <fieldset class="address-fieldset span-2">
+    <fieldset class="address-fieldset span-2" data-address-autocomplete>
         <legend><?= $mode === 'job' ? 'Location and private address' : 'Private address' ?></legend>
+        <label class="span-2 address-search-label">Find address
+            <input data-address-search type="search" autocomplete="off" placeholder="Start typing an address">
+            <span class="address-loading" data-address-loading hidden>Searching...</span>
+            <div class="address-suggestions" data-address-suggestions hidden></div>
+        </label>
         <label>Address line 1
-            <input name="address_line1" value="<?= h($line1) ?>" placeholder="Street address">
+            <input data-address-field="address_line1" name="address_line1" value="<?= h($line1) ?>" placeholder="Street address">
         </label>
         <label>Address line 2 <span>optional</span>
-            <input name="address_line2" value="<?= h($line2) ?>" placeholder="Apartment, building, etc.">
+            <input data-address-field="address_line2" name="address_line2" value="<?= h($line2) ?>" placeholder="Apartment, building, etc.">
         </label>
         <label>Town / Area
-            <input name="address_town" value="<?= h($town) ?>" required placeholder="Balbriggan">
+            <input data-address-field="address_town" name="address_town" value="<?= h($town) ?>" <?= $mode === 'job' ? '' : 'required' ?> placeholder="Balbriggan">
         </label>
         <label>County / City
-            <input name="address_county" value="<?= h($county) ?>" placeholder="Dublin">
+            <input data-address-field="address_county" name="address_county" value="<?= h($county) ?>" placeholder="Dublin">
         </label>
         <label>Eircode
-            <input name="eircode" value="<?= h($eircode) ?>" placeholder="Optional">
+            <input data-address-field="eircode" name="eircode" value="<?= h($eircode) ?>" <?= $eircodeRequired && $mode !== 'job' ? 'required' : '' ?> placeholder="Required for Ireland">
         </label>
         <label>Country
-            <input name="country" value="<?= h($country ?: 'Ireland') ?>">
+            <input data-address-field="country" name="country" value="<?= h($country ?: 'Ireland') ?>">
         </label>
+        <input data-address-field="latitude" name="latitude" type="hidden" value="<?= h($latitude) ?>">
+        <input data-address-field="longitude" name="longitude" type="hidden" value="<?= h($longitude) ?>">
         <p>Only Town / Area is shown publicly. Street address and Eircode stay private.</p>
     </fieldset>
     <?php
@@ -563,8 +610,8 @@ function renderJobsPage(PDO $pdo, ?array $user): void
             <aside class="filter-panel desktop-filter">
                 <?php renderJobFilters($filters, $categories); ?>
                 <div class="filter-note">
-                    <strong>Secure Pay enabled</strong>
-                    <span>Payments and booking records are tracked in the backend.</span>
+                    <strong>Booking records enabled</strong>
+                    <span>Applications and booking status are tracked in the backend.</span>
                 </div>
             </aside>
 
@@ -678,12 +725,12 @@ function renderJobCard(PDO $pdo, array $job, ?array $user): void
         <p><?= h($job['description']) ?></p>
         <div class="job-meta">
             <span><i class="fa-solid fa-location-dot"></i> <?= h(publicArea($job['location'] ?? 'Balbriggan')) ?></span>
-            <span><i class="fa-regular fa-calendar-check"></i> <?= h(scheduleFrequency($job['schedule_days'] ?? '', $job['frequency'] ?? 'Flexible')) ?></span>
+            <span><i class="fa-regular fa-calendar-check"></i> <?= h(scheduleGridSummary($job['schedule_grid'] ?? '') !== 'Flexible' ? scheduleGridSummary($job['schedule_grid'] ?? '') : scheduleFrequency($job['schedule_days'] ?? '', $job['frequency'] ?? 'Flexible')) ?></span>
             <span><i class="fa-solid fa-dollar-sign"></i> <?= money($job['pay']) ?>/hour</span>
         </div>
         <div class="job-meta">
             <span><i class="fa-regular fa-user"></i> Posted by <?= h($job['family_name'] ?? 'Household') ?></span>
-            <span>Schedule: <?= h(scheduleLabel($job['schedule_days'] ?? '')) ?></span>
+            <span>Needed: <?= h(scheduleGridSummary($job['schedule_grid'] ?? '') !== 'Flexible' ? scheduleGridSummary($job['schedule_grid'] ?? '') : scheduleLabel($job['schedule_days'] ?? '')) ?></span>
         </div>
         <div class="card-actions">
             <a class="button button-secondary" href="index.php?page=job&id=<?= (int) $job['job_id'] ?>">Details</a>
@@ -720,6 +767,59 @@ function renderScheduleDisplay(?string $selectedDays): void
     <?php
 }
 
+function renderAvailabilityGrid(string $inputName, ?string $selectedGrid = '', bool $interactive = true): void
+{
+    $selected = array_flip(array_filter(array_map('trim', explode(',', (string) $selectedGrid))));
+    $days = ['mon' => 'M', 'tue' => 'T', 'wed' => 'W', 'thu' => 'T', 'fri' => 'F', 'sat' => 'S', 'sun' => 'S'];
+    $periods = ['morning' => 'Morning', 'afternoon' => 'Afternoon', 'evening' => 'Evening', 'night' => 'Night'];
+    ?>
+    <div class="availability-grid <?= $interactive ? 'is-interactive' : 'is-readonly' ?>">
+        <?php foreach ($days as $day): ?>
+            <strong><?= h($day) ?></strong>
+        <?php endforeach; ?>
+        <?php foreach ($periods as $period => $label): ?>
+            <em><?= h($label) ?></em>
+            <?php foreach ($days as $dayValue => $dayLabel): ?>
+                <?php $value = $dayValue . '_' . $period; ?>
+                <?php if ($interactive): ?>
+                    <label class="<?= isset($selected[$value]) ? 'is-selected' : '' ?>">
+                        <input type="checkbox" name="<?= h($inputName) ?>[]" value="<?= h($value) ?>" <?= isset($selected[$value]) ? 'checked' : '' ?>>
+                        <span><?= h($dayLabel . ' ' . $label) ?></span>
+                    </label>
+                <?php else: ?>
+                    <span class="<?= isset($selected[$value]) ? 'is-selected' : '' ?>"></span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        <?php endforeach; ?>
+    </div>
+    <?php
+}
+
+function ordinalDay(int $day): string
+{
+    if ($day >= 11 && $day <= 13) {
+        return $day . 'th';
+    }
+    return $day . match ($day % 10) {
+        1 => 'st',
+        2 => 'nd',
+        3 => 'rd',
+        default => 'th',
+    };
+}
+
+function formatUpdatedAt(?string $timestamp): ?string
+{
+    if (!$timestamp) {
+        return null;
+    }
+    $time = strtotime($timestamp);
+    if (!$time) {
+        return null;
+    }
+    return date('F ', $time) . ordinalDay((int) date('j', $time)) . date(' Y', $time);
+}
+
 function renderJobDetails(PDO $pdo, ?array $user): void
 {
     $job = jobById($pdo, (int) ($_GET['id'] ?? 0));
@@ -731,119 +831,171 @@ function renderJobDetails(PDO $pdo, ?array $user): void
     $applications = applicationsForJob($pdo, (int) $job['job_id']);
     $myApplication = ($user && $user['user_type'] === 'worker') ? applicationFor($pdo, (int) $job['job_id'], (int) $user['user_id']) : null;
     $isOwner = $user && (int) $job['family_id'] === (int) $user['user_id'];
+    $completedApplication = null;
+    foreach ($applications as $applicationRow) {
+        if (($applicationRow['status_name'] ?? '') === 'completed') {
+            $completedApplication = $applicationRow;
+            break;
+        }
+    }
+    $isCompletedJob = $completedApplication !== null;
+    $eligibleCompletedApplicationId = 0;
+    if ($isCompletedJob && $user) {
+        if ($isOwner) {
+            $eligibleCompletedApplicationId = (int) $completedApplication['application_id'];
+        } elseif ($myApplication && ($myApplication['status_name'] ?? '') === 'completed') {
+            $eligibleCompletedApplicationId = (int) $myApplication['application_id'];
+        }
+    }
+    $scheduleText = scheduleGridSummary($job['schedule_grid'] ?? '');
+    if ($scheduleText === 'Flexible') {
+        $scheduleText = scheduleLabel($job['schedule_days'] ?? '');
+    }
+    $displayGrid = (string) ($job['schedule_grid'] ?? '');
+    if ($displayGrid === '' && !empty($job['schedule_days'])) {
+        $displayGrid = implode(',', array_map(
+            fn(string $day): string => trim($day) . '_morning',
+            array_filter(explode(',', (string) $job['schedule_days'])
+        )));
+    }
     ?>
-    <main class="page-shell">
-        <section class="detail-layout">
-            <article class="detail-main">
+    <main class="page-shell job-detail-page">
+        <section class="job-detail-clean">
+            <article class="job-detail-card">
                 <a class="back-link" href="index.php?page=jobs"><i class="fa-solid fa-arrow-left"></i> Back to jobs</a>
                 <span class="chip"><?= h(labelize($job['category_name'] ?? 'General help')) ?></span>
                 <h1><?= h($job['title']) ?></h1>
-                <p class="lead"><?= h($job['description']) ?></p>
-                <div class="detail-facts">
-                    <div><span>Hourly rate</span><strong><?= money($job['pay']) ?>/hour</strong></div>
-                    <div><span>Frequency</span><strong><?= h(scheduleFrequency($job['schedule_days'] ?? '', $job['frequency'])) ?></strong></div>
-                    <div><span>Area</span><strong><?= h(publicArea($job['location'])) ?></strong></div>
-                    <div><span>Schedule</span><strong><?= h(scheduleLabel($job['schedule_days'] ?? '')) ?></strong></div>
-                </div>
-                <?php if (!empty($job['preferred_start_date']) || !empty($job['notes'])): ?>
-                    <div class="detail-facts detail-facts-compact">
-                        <?php if (!empty($job['preferred_start_date'])): ?>
-                            <div><span>Preferred start</span><strong><?= h(date('M j, Y', strtotime($job['preferred_start_date']))) ?></strong></div>
-                        <?php endif; ?>
-                        <?php if (!empty($job['notes'])): ?>
-                            <div><span>Notes</span><strong><?= h($job['notes']) ?></strong></div>
-                        <?php endif; ?>
+
+                <div class="job-key-stats">
+                    <div>
+                        <span>Hourly rate</span>
+                        <strong><?= money($job['pay']) ?>/hour</strong>
                     </div>
+                    <div>
+                        <span>Area</span>
+                        <strong><?= h(publicArea($job['location'])) ?></strong>
+                    </div>
+                </div>
+
+                <section class="job-info-section">
+                    <h2>Job description</h2>
+                    <p><?= h($job['description']) ?></p>
+                </section>
+
+                <?php if (trim((string) ($job['notes'] ?? '')) !== ''): ?>
+                    <section class="job-notes-section">
+                        <h2>Notes / needs</h2>
+                        <p><?= h($job['notes']) ?></p>
+                    </section>
                 <?php endif; ?>
 
-                <h2>About this family</h2>
-                <div class="profile-line">
-                    <?= avatar(['name' => $job['family_name'], 'avatar_url' => $job['family_avatar']], 'avatar') ?>
-                    <div>
-                        <strong><?= h($job['family_name']) ?></strong>
-                        <span><?= h(publicArea($job['family_neighbourhood'] ?? 'Balbriggan')) ?></span>
-                    </div>
-                </div>
-
-                <?php if ($isOwner): ?>
-                    <h2>Applicants</h2>
-                    <div class="applicant-list">
-                        <?php if (!$applications): ?>
-                            <div class="empty-state">No applicants yet.</div>
+                <?php if ($isCompletedJob): ?>
+                    <section class="job-info-section review-area">
+                        <h2>Reviews</h2>
+                        <?php if ($eligibleCompletedApplicationId > 0): ?>
+                            <?php renderReviewPrompt($pdo, $user, $eligibleCompletedApplicationId); ?>
                         <?php endif; ?>
-                        <?php foreach ($applications as $application): ?>
-                            <div class="applicant-row">
-                                <?= avatar(['name' => $application['worker_name'], 'avatar_url' => $application['avatar_url']], 'avatar') ?>
-                                <div>
-                                    <strong><?= h($application['worker_name']) ?></strong>
-                                <span>Agreed rate: <?= money($application['agreed_rate'] ?? $job['pay']) ?>/hour</span>
-                                </div>
-                                <span class="status-pill <?= h(statusClass($application['status_name'])) ?>"><?= h(labelize($application['status_name'])) ?></span>
-                                <?php if ($application['status_name'] === 'pending'): ?>
-                                    <form action="index.php" method="post" class="inline-actions">
-                                        <?= csrfField() ?>
-                                        <input type="hidden" name="action" value="update_application_status">
-                                        <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
-                                        <input type="hidden" name="redirect" value="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
-                                        <button name="status" value="accepted" class="button button-primary button-small" type="submit">Accept</button>
-                                        <button name="status" value="rejected" class="button button-danger button-small" type="submit">Reject</button>
-                                    </form>
-                                <?php elseif ($application['status_name'] === 'accepted'): ?>
-                                    <form action="index.php" method="post" class="inline-actions">
-                                        <?= csrfField() ?>
-                                        <input type="hidden" name="action" value="update_application_status">
-                                        <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
-                                        <input type="hidden" name="redirect" value="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
-                                        <button name="status" value="cancelled" class="button button-danger button-small" type="submit">Cancel</button>
-                                    </form>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+                        <?php renderJobReviews($pdo, (int) $job['job_id']); ?>
+                    </section>
+                <?php elseif ($isOwner): ?>
+                    <?php renderOwnerRequests($pdo, $applications, $job, $user); ?>
                 <?php endif; ?>
             </article>
 
-            <aside class="booking-panel">
-                <div class="rate"><?= money($job['pay']) ?> <span>/ hour</span></div>
-                <?php renderScheduleDisplay($job['schedule_days'] ?? ''); ?>
-                <div class="next-opening">
-                    <span>Next opening</span>
-                    <strong><?= h(!empty($job['preferred_start_date']) ? date('M j, Y', strtotime($job['preferred_start_date'])) : formatDateTime($job['scheduled_at'])) ?></strong>
-                </div>
+            <?php if (!$isCompletedJob): ?>
+                <aside class="job-schedule-card">
+                    <div class="schedule-card-heading">
+                        <span>Schedule</span>
+                    </div>
+                    <?php renderAvailabilityGrid('display_schedule', $displayGrid, false); ?>
 
-                <?php if (!$user): ?>
-                    <a class="button button-primary button-full" href="index.php?page=login">Log In to Apply</a>
-                <?php elseif ($user['user_type'] === 'worker'): ?>
-                    <?php if ($myApplication): ?>
-                        <div class="status-pill <?= h(statusClass($myApplication['status_name'])) ?>">
-                            <?= h(labelize($myApplication['status_name'])) ?> at <?= money($myApplication['agreed_rate'] ?? $job['pay']) ?>/hour
-                        </div>
-                    <?php else: ?>
-                        <form action="index.php" method="post">
+                    <?php if (!$user): ?>
+                        <a class="button button-primary button-full" href="index.php?page=login">Log In to Apply</a>
+                    <?php elseif ($user['user_type'] === 'worker'): ?>
+                        <?php if ($myApplication): ?>
+                            <div class="status-pill <?= h(statusClass($myApplication['status_name'])) ?>">
+                                <?= h(labelize($myApplication['status_name'])) ?> at <?= money($myApplication['agreed_rate'] ?? $job['pay']) ?>/hour
+                            </div>
+                        <?php else: ?>
+                            <form action="index.php" method="post">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="action" value="apply_job">
+                                <input type="hidden" name="job_id" value="<?= (int) $job['job_id'] ?>">
+                                <button class="button button-primary button-full" type="submit">Apply for This Job</button>
+                            </form>
+                        <?php endif; ?>
+                    <?php endif; ?>
+
+                    <?php if ($user && (int) $job['family_id'] !== (int) $user['user_id']): ?>
+                        <form action="index.php" method="post" class="message-box">
                             <?= csrfField() ?>
-                            <input type="hidden" name="action" value="apply_job">
+                            <input type="hidden" name="action" value="send_message">
+                            <input type="hidden" name="receiver_id" value="<?= (int) $job['family_id'] ?>">
                             <input type="hidden" name="job_id" value="<?= (int) $job['job_id'] ?>">
-                            <button class="button button-primary button-full" type="submit">Apply for This Job</button>
+                            <textarea name="body" rows="4" placeholder="Ask about this job"></textarea>
+                            <button class="button button-secondary button-full" type="submit">Send Message</button>
                         </form>
                     <?php endif; ?>
-                <?php endif; ?>
-
-                <?php if ($user && (int) $job['family_id'] !== (int) $user['user_id']): ?>
-                    <form action="index.php" method="post" class="message-box">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="action" value="send_message">
-                        <input type="hidden" name="receiver_id" value="<?= (int) $job['family_id'] ?>">
-                        <input type="hidden" name="job_id" value="<?= (int) $job['job_id'] ?>">
-                        <textarea name="body" rows="4" placeholder="Ask about this job"></textarea>
-                        <button class="button button-secondary button-full" type="submit">Send Message</button>
-                    </form>
-                <?php endif; ?>
-                <?php if (!$user): ?>
-                    <a class="button button-secondary button-full" href="index.php?page=signup">Create Account to Message</a>
-                <?php endif; ?>
-            </aside>
+                    <?php if (!$user): ?>
+                        <a class="button button-secondary button-full" href="index.php?page=signup">Create Account to Message</a>
+                    <?php endif; ?>
+                </aside>
+            <?php endif; ?>
         </section>
     </main>
+    <?php
+}
+
+function renderOwnerRequests(PDO $pdo, array $applications, array $job, array $user): void
+{
+    ?>
+    <details class="owner-requests">
+        <summary>Requests<?= $applications ? ' (' . count($applications) . ')' : '' ?></summary>
+        <div class="applicant-list">
+            <?php if (!$applications): ?>
+                <div class="empty-state">No applicants yet.</div>
+            <?php endif; ?>
+            <?php foreach ($applications as $application): ?>
+                <div class="applicant-row">
+                    <?= avatar(['name' => $application['worker_name'], 'avatar_url' => $application['avatar_url']], 'avatar') ?>
+                    <div>
+                        <strong><?= h($application['worker_name']) ?></strong>
+                        <span>Agreed rate: <?= money($application['agreed_rate'] ?? $job['pay']) ?>/hour</span>
+                    </div>
+                    <span class="status-pill <?= h(statusClass($application['status_name'])) ?>"><?= h(labelize($application['status_name'])) ?></span>
+                    <?php if ($application['status_name'] === 'pending'): ?>
+                        <form action="index.php" method="post" class="inline-actions">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="action" value="update_application_status">
+                            <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                            <input type="hidden" name="redirect" value="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
+                            <button name="status" value="accepted" class="button button-primary button-small" type="submit">Accept</button>
+                            <button name="status" value="rejected" class="button button-danger button-small" type="submit">Reject</button>
+                        </form>
+                    <?php elseif ($application['status_name'] === 'accepted'): ?>
+                        <form action="index.php" method="post" class="inline-actions">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="action" value="update_application_status">
+                            <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                            <input type="hidden" name="redirect" value="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
+                            <button name="status" value="cancelled" class="button button-danger button-small" type="submit">Cancel</button>
+                            <button name="status" value="finalised" class="button button-primary button-small" type="submit">Finalise booking</button>
+                        </form>
+                    <?php elseif ($application['status_name'] === 'finalised'): ?>
+                        <form action="index.php" method="post" class="inline-actions">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="action" value="update_application_status">
+                            <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                            <input type="hidden" name="redirect" value="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
+                            <button name="status" value="completed" class="button button-primary button-small" type="submit">Mark as completed</button>
+                        </form>
+                    <?php elseif ($application['status_name'] === 'completed'): ?>
+                        <?php renderReviewPrompt($pdo, $user, (int) $application['application_id']); ?>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </details>
     <?php
 }
 
@@ -891,7 +1043,7 @@ function renderMessagesPage(PDO $pdo, ?array $user): void
         <section class="thread-panel">
             <div class="secure-banner">
                 <i class="fa-solid fa-lock"></i>
-                <span><strong>Secure Pay Enabled:</strong> bookings and payments are stored once finalized.</span>
+                <span><strong>Booking records:</strong> keep arrangements and messages together. In-platform payments are coming later.</span>
             </div>
             <?php if (!$selectedUser): ?>
                 <div class="empty-state">Choose a conversation.</div>
@@ -899,7 +1051,14 @@ function renderMessagesPage(PDO $pdo, ?array $user): void
                 <div class="thread-scroll">
                     <?php foreach ($messages as $message): ?>
                         <div class="bubble <?= (int) $message['sender_id'] === (int) $user['user_id'] ? 'mine' : 'theirs' ?>">
-                            <p><?= h($message['body']) ?></p>
+                            <?php if (str_starts_with((string) $message['body'], '[PRIVATE_ADDRESS]')): ?>
+                                <div class="address-share-card">
+                                    <strong>Private address shared</strong>
+                                    <p><?= h(substr((string) $message['body'], 17)) ?></p>
+                                </div>
+                            <?php else: ?>
+                                <p><?= h($message['body']) ?></p>
+                            <?php endif; ?>
                             <span><?= h(date('M j, g:i A', strtotime($message['created_at']))) ?></span>
                         </div>
                     <?php endforeach; ?>
@@ -959,19 +1118,110 @@ function renderFinalizePayment(PDO $pdo, array $user, array $selectedUser, int $
     $stmt->execute(['job_id' => $jobId, 'worker_id' => (int) $selectedUser['user_id']]);
     $application = $stmt->fetch();
 
-    if (!$application || !in_array($application['status_name'], ['accepted', 'completed'], true)) {
+    if (!$application || !in_array($application['status_name'], ['accepted', 'finalised', 'completed'], true)) {
+        return;
+    }
+    if ($application['status_name'] === 'completed') {
+        renderReviewPrompt($pdo, $user, (int) $application['application_id']);
         return;
     }
     ?>
-    <form action="index.php" method="post" class="pay-box">
+    <div class="pay-box">
+        <?php if ($application['status_name'] === 'accepted'): ?>
+            <form action="index.php" method="post">
+                <?= csrfField() ?>
+                <input type="hidden" name="action" value="share_private_address">
+                <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                <input type="hidden" name="redirect" value="index.php?page=messages&with=<?= (int) $selectedUser['user_id'] ?>">
+                <button class="button button-secondary button-full" type="submit" onclick="return confirm('Only share your private address when you are comfortable and the booking is confirmed.')">Share private address</button>
+            </form>
+            <form action="index.php" method="post">
+                <?= csrfField() ?>
+                <input type="hidden" name="action" value="finalize_payment">
+                <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                <input type="hidden" name="redirect" value="index.php?page=messages&with=<?= (int) $selectedUser['user_id'] ?>">
+                <button class="button button-primary button-full" type="submit">Finalise booking</button>
+            </form>
+        <?php else: ?>
+            <p>Booking finalised. Payment is arranged directly between the household and helper for now.</p>
+            <form action="index.php" method="post">
+                <?= csrfField() ?>
+                <input type="hidden" name="action" value="update_application_status">
+                <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
+                <input type="hidden" name="status" value="completed">
+                <input type="hidden" name="redirect" value="index.php?page=messages&with=<?= (int) $selectedUser['user_id'] ?>">
+                <button class="button button-primary button-full" type="submit">Mark as completed</button>
+            </form>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+function renderReviewPrompt(PDO $pdo, array $user, int $applicationId): void
+{
+    $existingReview = reviewFor($pdo, $applicationId, (int) $user['user_id']);
+    if ($existingReview) {
+        ?>
+        <article class="review-card">
+            <div class="review-stars" aria-label="<?= (int) $existingReview['rating'] ?> out of 5 stars">
+                <?php for ($i = 1; $i <= 5; $i++): ?>
+                    <i class="<?= $i <= (int) $existingReview['rating'] ? 'fa-solid' : 'fa-regular' ?> fa-star"></i>
+                <?php endfor; ?>
+            </div>
+            <strong>Your review</strong>
+            <?php if (!empty($existingReview['body'])): ?>
+                <p><?= h($existingReview['body']) ?></p>
+            <?php endif; ?>
+        </article>
+        <?php
+        return;
+    }
+    $copy = ($user['user_type'] ?? '') === 'family'
+        ? 'Was this job completed? If so, leave a review for your local helper.'
+        : 'Was this job completed? You can leave feedback about this household.';
+    ?>
+    <form action="index.php" method="post" class="review-box">
         <?= csrfField() ?>
-        <input type="hidden" name="action" value="finalize_payment">
-        <input type="hidden" name="application_id" value="<?= (int) $application['application_id'] ?>">
-        <input type="hidden" name="amount" value="<?= h((string) $pay) ?>">
-        <input type="hidden" name="scheduled_for" value="<?= h(date('Y-m-d\TH:i', strtotime($application['scheduled_at'] ?? 'now'))) ?>">
-        <input type="hidden" name="redirect" value="index.php?page=messages&with=<?= (int) $selectedUser['user_id'] ?>">
-        <button class="button button-primary button-full" type="submit">Finalize Booking & Pay</button>
+        <input type="hidden" name="action" value="leave_review">
+        <input type="hidden" name="application_id" value="<?= (int) $applicationId ?>">
+        <input type="hidden" name="redirect" value="<?= h($_SERVER['REQUEST_URI'] ?? 'index.php?page=account') ?>">
+        <strong><?= h($copy) ?></strong>
+        <fieldset class="star-rating" data-star-rating>
+            <legend>Rating</legend>
+            <?php for ($rating = 5; $rating >= 1; $rating--): ?>
+                <input id="rating-<?= (int) $applicationId ?>-<?= $rating ?>" name="rating" type="radio" value="<?= $rating ?>" <?= $rating === 5 ? 'checked' : '' ?>>
+                <label for="rating-<?= (int) $applicationId ?>-<?= $rating ?>" title="<?= $rating ?> stars"><i class="fa-solid fa-star"></i></label>
+            <?php endfor; ?>
+        </fieldset>
+        <textarea name="body" rows="3" placeholder="Describe how the job went"></textarea>
+        <button class="button button-secondary button-full" type="submit">Leave review</button>
     </form>
+    <?php
+}
+
+function renderJobReviews(PDO $pdo, int $jobId): void
+{
+    $reviews = reviewsForJob($pdo, $jobId);
+    if (!$reviews) {
+        echo '<div class="empty-state">Reviews will appear here after they are submitted.</div>';
+        return;
+    }
+    ?>
+    <div class="review-list">
+        <?php foreach ($reviews as $review): ?>
+            <article class="review-card">
+                <div class="review-stars" aria-label="<?= (int) $review['rating'] ?> out of 5 stars">
+                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                        <i class="<?= $i <= (int) $review['rating'] ? 'fa-solid' : 'fa-regular' ?> fa-star"></i>
+                    <?php endfor; ?>
+                </div>
+                <strong><?= h($review['reviewer_name']) ?> reviewed <?= h($review['reviewee_name']) ?></strong>
+                <?php if (!empty($review['body'])): ?>
+                    <p><?= h($review['body']) ?></p>
+                <?php endif; ?>
+            </article>
+        <?php endforeach; ?>
+    </div>
     <?php
 }
 
@@ -1023,6 +1273,11 @@ function renderAccountPage(PDO $pdo, ?array $user): void
                         <label class="span-2">Availability
                             <input name="availability_note" value="<?= h($user['availability_note'] ?? '') ?>" placeholder="Weekday evenings, weekends, etc.">
                         </label>
+                        <fieldset class="schedule-picker span-2">
+                            <legend>Weekly availability</legend>
+                            <p>Select the time blocks you are usually available.</p>
+                            <?php renderAvailabilityGrid('availability_grid', $user['availability_grid'] ?? '', true); ?>
+                        </fieldset>
                         <fieldset class="category-picker span-2">
                             <legend>Services offered</legend>
                             <?php foreach ($categories as $category): ?>
@@ -1065,25 +1320,19 @@ function renderAccountPage(PDO $pdo, ?array $user): void
                         <label class="span-2">Description
                             <textarea name="description" rows="4" required placeholder="What do you need help with?"></textarea>
                         </label>
-                        <?php renderAddressFields($user, 'job'); ?>
+                        <details class="different-location span-2">
+                            <summary>Use a different location for this job?</summary>
+                            <label class="checkbox-line">
+                                <input name="use_different_location" type="checkbox" value="1">
+                                <span>This job is not at my saved address</span>
+                            </label>
+                            <?php renderAddressFields($user, 'job'); ?>
+                        </details>
                         <fieldset class="schedule-picker span-2">
                             <legend>Schedule</legend>
-                            <p>Select the days this job usually happens.</p>
-                            <div class="mini-calendar week-selector">
-                                <?php foreach (['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'] as $value => $label): ?>
-                                    <label>
-                                        <input type="checkbox" name="schedule_days[]" value="<?= h($value) ?>">
-                                        <span><?= h($label) ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
+                            <p>Select when you need help. We’ll use your saved address for this job. Only your town/area is shown publicly.</p>
+                            <?php renderAvailabilityGrid('schedule_grid', '', true); ?>
                         </fieldset>
-                        <label>Preferred start date
-                            <input name="preferred_start_date" type="date">
-                        </label>
-                        <label>Specific date/time <span>optional</span>
-                            <input name="scheduled_at" type="datetime-local">
-                        </label>
                         <label class="span-2">Optional notes
                             <textarea name="notes" rows="3" placeholder="Anything useful about access, pets, parking, or timing."></textarea>
                         </label>
@@ -1103,26 +1352,72 @@ function renderAccountPage(PDO $pdo, ?array $user): void
                 </div>
 
                 <?php if (($user['user_type'] ?? '') === 'worker'): ?>
+                    <?php
+                    $acceptedApplications = array_values(array_filter($applications, fn(array $application): bool => in_array($application['status_name'], ['accepted', 'finalised'], true)));
+                    $completedApplications = array_values(array_filter($applications, fn(array $application): bool => $application['status_name'] === 'completed'));
+                    ?>
+                    <h3 id="jobs-accepted">Jobs accepted</h3>
                     <div class="activity-list">
-                        <?php foreach ($applications as $application): ?>
+                        <?php if (!$acceptedApplications): ?>
+                            <div class="empty-state">Accepted jobs will appear here.</div>
+                        <?php endif; ?>
+                        <?php foreach ($acceptedApplications as $application): ?>
                             <a class="activity-row" href="index.php?page=job&id=<?= (int) $application['job_id'] ?>">
                                 <span>
                                     <strong><?= h($application['title']) ?></strong>
-                                    <small><?= h($application['family_name']) ?> &middot; <?= money($application['agreed_rate'] ?? $application['pay']) ?>/hour &middot; <?= h(scheduleFrequency($application['schedule_days'] ?? '', $application['frequency'] ?? 'Flexible')) ?></small>
+                                    <small><?= h($application['family_name']) ?> &middot; <?= money($application['agreed_rate'] ?? $application['pay']) ?>/hour</small>
                                 </span>
                                 <em class="status-pill <?= h(statusClass($application['status_name'])) ?>"><?= h(labelize($application['status_name'])) ?></em>
                             </a>
                         <?php endforeach; ?>
                     </div>
-                <?php else: ?>
+                    <h3 id="jobs-completed">Jobs completed</h3>
                     <div class="activity-list">
-                        <?php foreach ($postedJobs as $job): ?>
+                        <?php if (!$completedApplications): ?>
+                            <div class="empty-state">Completed jobs will appear here.</div>
+                        <?php endif; ?>
+                        <?php foreach ($completedApplications as $application): ?>
+                            <a class="activity-row" href="index.php?page=job&id=<?= (int) $application['job_id'] ?>">
+                                <span>
+                                    <strong><?= h($application['title']) ?></strong>
+                                    <small><?= h($application['family_name']) ?> &middot; <?= money($application['agreed_rate'] ?? $application['pay']) ?>/hour</small>
+                                </span>
+                                <em class="status-pill status-completed">Completed</em>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <?php
+                    $currentJobs = array_values(array_filter($postedJobs, fn(array $job): bool => ($job['booking_status'] ?? 'posted') !== 'completed'));
+                    $completedJobs = array_values(array_filter($postedJobs, fn(array $job): bool => ($job['booking_status'] ?? '') === 'completed'));
+                    ?>
+                    <h3 id="jobs-posted">Jobs posted</h3>
+                    <div class="activity-list">
+                        <?php if (!$currentJobs): ?>
+                            <div class="empty-state">Posted and accepted jobs will appear here.</div>
+                        <?php endif; ?>
+                        <?php foreach ($currentJobs as $job): ?>
                             <a class="activity-row" href="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
                                 <span>
                                     <strong><?= h($job['title']) ?></strong>
                                     <small><?= h(labelize($job['category_name'])) ?> &middot; <?= (int) $job['application_count'] ?> applicants</small>
                                 </span>
-                                <em><?= money($job['pay']) ?></em>
+                                <em class="status-pill <?= h(statusClass($job['booking_status'] ?? 'posted')) ?>"><?= h(labelize($job['booking_status'] ?? 'posted')) ?></em>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <h3 id="jobs-completed">Jobs completed</h3>
+                    <div class="activity-list">
+                        <?php if (!$completedJobs): ?>
+                            <div class="empty-state">Completed jobs will appear here.</div>
+                        <?php endif; ?>
+                        <?php foreach ($completedJobs as $job): ?>
+                            <a class="activity-row" href="index.php?page=job&id=<?= (int) $job['job_id'] ?>">
+                                <span>
+                                    <strong><?= h($job['title']) ?></strong>
+                                    <small><?= h(labelize($job['category_name'])) ?> &middot; <?= money($job['pay']) ?>/hour</small>
+                                </span>
+                                <em class="status-pill status-completed">Completed</em>
                             </a>
                         <?php endforeach; ?>
                     </div>
@@ -1142,6 +1437,8 @@ function renderWorkerProfile(PDO $pdo, ?array $user): void
         return;
     }
     $skills = workerCategories($pdo, (int) $worker['user_id']);
+    $availabilitySummary = scheduleGridSummary($worker['availability_grid'] ?? '');
+    $updatedAt = formatUpdatedAt($worker['updated_at'] ?? null);
     ?>
     <main class="page-shell">
         <section class="worker-profile-layout">
@@ -1175,6 +1472,12 @@ function renderWorkerProfile(PDO $pdo, ?array $user): void
                     <div class="empty-state">This helper has not added services yet.</div>
                 <?php endif; ?>
 
+                <h2>Availability</h2>
+                <?php renderAvailabilityGrid('availability_display', $worker['availability_grid'] ?? '', false); ?>
+                <?php if ($availabilitySummary !== 'Flexible'): ?>
+                    <p class="lead availability-summary"><?= h($availabilitySummary) ?></p>
+                <?php endif; ?>
+
                 <h2>Completed Work</h2>
                 <div class="feedback-list">
                     <div class="empty-state">Booking feedback will appear here after real completed jobs.</div>
@@ -1183,14 +1486,13 @@ function renderWorkerProfile(PDO $pdo, ?array $user): void
 
             <aside class="booking-panel">
                 <div class="rate"><?= money($worker['hourly_rate']) ?> <span>/ hr</span></div>
-                <div class="mini-calendar">
-                    <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
-                    <strong>8</strong><strong>9</strong><strong>10</strong><strong>11</strong><strong>12</strong><strong>13</strong><strong>14</strong>
-                </div>
-                <div class="next-opening">
-                    <span>Next opening</span>
-                    <strong><?= h($worker['availability_note'] ?? 'This week') ?></strong>
-                </div>
+                <section class="profile-availability-card">
+                    <span>Availability</span>
+                    <?php renderAvailabilityGrid('availability_sidebar', $worker['availability_grid'] ?? '', false); ?>
+                    <?php if ($updatedAt): ?>
+                        <p>Updated at <?= h($updatedAt) ?></p>
+                    <?php endif; ?>
+                </section>
                 <?php if ($user && (int) $worker['user_id'] !== (int) $user['user_id']): ?>
                     <form action="index.php" method="post" class="message-box">
                         <?= csrfField() ?>
@@ -1315,7 +1617,7 @@ function renderDatabaseError(Throwable $error): void
         'jobs' => renderJobsPage($pdo, $currentUser),
         'map' => renderMapPage($pdo, $currentUser),
         'job' => renderJobDetails($pdo, $currentUser),
-        'how' => renderHowPage(),
+        'how' => renderHowPage($currentUser),
         'messages' => renderMessagesPage($pdo, $currentUser),
         'account' => renderAccountPage($pdo, $currentUser),
         'worker' => renderWorkerProfile($pdo, $currentUser),
@@ -1335,14 +1637,155 @@ function renderDatabaseError(Throwable $error): void
         sync();
         input.addEventListener('change', sync);
     });
+    document.querySelectorAll('.availability-grid input[type="checkbox"]').forEach((input) => {
+        const label = input.closest('label');
+        const sync = () => label?.classList.toggle('is-selected', input.checked);
+        sync();
+        input.addEventListener('change', sync);
+    });
+
+    const sidebar = document.querySelector('[data-account-sidebar]');
+    const sidebarBackdrop = document.querySelector('[data-sidebar-backdrop]');
+    const openSidebar = () => {
+        if (!sidebar || !sidebarBackdrop) return;
+        sidebarBackdrop.hidden = false;
+        requestAnimationFrame(() => {
+            sidebar.classList.add('is-open');
+            sidebarBackdrop.classList.add('is-open');
+            sidebar.setAttribute('aria-hidden', 'false');
+        });
+    };
+    const closeSidebar = () => {
+        if (!sidebar || !sidebarBackdrop) return;
+        sidebar.classList.remove('is-open');
+        sidebarBackdrop.classList.remove('is-open');
+        sidebar.setAttribute('aria-hidden', 'true');
+        window.setTimeout(() => {
+            if (!sidebar.classList.contains('is-open')) sidebarBackdrop.hidden = true;
+        }, 220);
+    };
+    document.querySelectorAll('[data-sidebar-open]').forEach((button) => button.addEventListener('click', openSidebar));
+    document.querySelectorAll('[data-sidebar-close], [data-sidebar-backdrop]').forEach((button) => button.addEventListener('click', closeSidebar));
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeSidebar();
+    });
+
+    document.querySelectorAll('[data-address-autocomplete]').forEach((fieldset) => {
+        const search = fieldset.querySelector('[data-address-search]');
+        const menu = fieldset.querySelector('[data-address-suggestions]');
+        const loading = fieldset.querySelector('[data-address-loading]');
+        if (!search || !menu) return;
+        let active = -1;
+        let results = [];
+        let timer = 0;
+        let controller = null;
+
+        search.addEventListener('input', () => {
+            window.clearTimeout(timer);
+            const query = search.value.trim();
+            active = -1;
+            if (query.length < 3) {
+                showAddressMessage(menu, 'Type at least 3 characters.');
+                return;
+            }
+            timer = window.setTimeout(async () => {
+                if (controller) controller.abort();
+                controller = new AbortController();
+                loading.hidden = false;
+                try {
+                    const response = await fetch(`index.php?page=address_suggest&q=${encodeURIComponent(query)}`, { signal: controller.signal });
+                    const data = await response.json();
+                    results = Array.isArray(data.results) ? data.results : [];
+                    renderAddressSuggestions(fieldset, menu, results, (item) => applyAddress(fieldset, item));
+                } catch (error) {
+                    if (error.name !== 'AbortError') showAddressMessage(menu, 'No suggestions available right now.');
+                } finally {
+                    loading.hidden = true;
+                }
+            }, 280);
+        });
+
+        search.addEventListener('keydown', (event) => {
+            const buttons = [...menu.querySelectorAll('button')];
+            if (!buttons.length || menu.hidden) return;
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                active = Math.min(active + 1, buttons.length - 1);
+                buttons[active].focus();
+            } else if (event.key === 'Escape') {
+                menu.hidden = true;
+            }
+        });
+
+        const eircode = fieldset.querySelector('[data-address-field="eircode"]');
+        const country = fieldset.querySelector('[data-address-field="country"]');
+        const differentLocation = fieldset.closest('.different-location');
+        const differentLocationToggle = differentLocation?.querySelector('input[name="use_different_location"]');
+        const syncEircodeRequired = () => {
+            if (!eircode) return;
+            const isIreland = (country?.value || 'Ireland').trim().toLowerCase() === 'ireland';
+            eircode.required = isIreland && (!differentLocation || !!differentLocationToggle?.checked);
+        };
+        syncEircodeRequired();
+        country?.addEventListener('input', syncEircodeRequired);
+        differentLocationToggle?.addEventListener('change', syncEircodeRequired);
+        eircode?.addEventListener('blur', async () => {
+            const query = eircode.value.trim();
+            if (query.length < 3) return;
+            loading.hidden = false;
+            try {
+                const response = await fetch(`index.php?page=address_suggest&q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                const first = Array.isArray(data.results) ? data.results[0] : null;
+                if (first) applyAddress(fieldset, first);
+            } catch (error) {
+                // Manual entry remains available if lookup fails.
+            } finally {
+                loading.hidden = true;
+            }
+        });
+    });
+
+    function renderAddressSuggestions(fieldset, menu, results, onSelect) {
+        menu.innerHTML = '';
+        if (!results.length) {
+            showAddressMessage(menu, 'No address suggestions found.');
+            return;
+        }
+        results.forEach((item) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = item.label || `${item.address_line1 || ''} ${item.address_town || ''}`.trim();
+            button.addEventListener('click', () => onSelect(item));
+            menu.appendChild(button);
+        });
+        menu.hidden = false;
+    }
+
+    function showAddressMessage(menu, message) {
+        menu.innerHTML = `<div class="address-suggestion-empty">${escapeHtml(message)}</div>`;
+        menu.hidden = false;
+    }
+
+    function applyAddress(fieldset, item) {
+        ['address_line1', 'address_line2', 'address_town', 'address_county', 'eircode', 'country', 'latitude', 'longitude'].forEach((key) => {
+            const input = fieldset.querySelector(`[data-address-field="${key}"]`);
+            if (input && item[key] !== null && item[key] !== undefined) input.value = item[key];
+        });
+        const search = fieldset.querySelector('[data-address-search]');
+        const menu = fieldset.querySelector('[data-address-suggestions]');
+        if (search) search.value = item.label || '';
+        if (menu) menu.hidden = true;
+    }
 
     if (typeof L === 'undefined') return;
 
     document.querySelectorAll('[data-map-markers]').forEach((mapEl) => {
         const markers = JSON.parse(mapEl.dataset.mapMarkers || '[]');
         const map = L.map(mapEl).setView([53.1424, -7.6921], 7);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+        const darkMap = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        L.tileLayer(`https://{s}.basemaps.cartocdn.com/${darkMap ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
         }).addTo(map);
 
         const bounds = [];
@@ -1351,11 +1794,20 @@ function renderDatabaseError(Throwable $error): void
             const lng = Number(marker.longitude);
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+            L.circle([lat, lng], {
+                radius: Number(marker.radius || 5000),
+                color: marker.marker_type === 'helper' ? '#278459' : '#2f6f93',
+                weight: 1,
+                fillColor: marker.marker_type === 'helper' ? '#53b982' : '#6fc7cf',
+                fillOpacity: 0.12,
+                opacity: 0.32
+            }).addTo(map);
+
             const icon = L.divIcon({
                 className: 'map-marker',
-                html: `<span class="${marker.marker_type === 'helper' ? 'worker-marker' : 'job-marker'}"></span>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
+                html: `<span class="${marker.marker_type === 'helper' ? 'worker-marker' : 'job-marker'}"><i class="fa-solid ${marker.marker_type === 'helper' ? 'fa-user' : 'fa-briefcase'}"></i></span>`,
+                iconSize: [34, 42],
+                iconAnchor: [17, 38]
             });
 
             L.marker([lat, lng], { icon })
